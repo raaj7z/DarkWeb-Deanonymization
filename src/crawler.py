@@ -3,7 +3,7 @@ import time
 import random
 import re
 import json
-from concurrent.futures import ThreadPoolExecutor, as_c
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from bs4 import BeautifulSoup
 from datetime import datetime
 from utils import get_tor_session, success, error, info, warn, setup_logger
