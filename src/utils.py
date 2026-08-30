@@ -20,7 +20,8 @@ USER_AGENTS = [
     'Mozilla/5.0 (Windows NT 10.0; rv:102.0) Gecko/20100101 Firefox/102.0',
     'Mozilla/5.0 (Windows NT 10.0; rv:91.0) Gecko/20100101 Firefox/91.0',
     'Mozilla/5.0 (X11; Linux x86_64; rv:102.0) Gecko/20100101 Firefox/102.0',
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/115.0',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:102.0) Gecko/20100101 Firefox/102.0',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:115.0) Gecko/20100101 Firefox/115.0',
 ]
 
 def get_tor_session(retries=3):
@@ -53,7 +54,6 @@ def verify_tor(session):
         return False
 
 def get_real_ip():
-    """Get your real IP for comparison"""
     try:
         r = requests.get('https://api.ipify.org', timeout=5)
         return r.text.strip()
@@ -61,7 +61,6 @@ def get_real_ip():
         return "Unknown"
 
 def get_tor_ip(session):
-    """Get current Tor exit node IP"""
     try:
         r = session.get('http://ifconfig.me', timeout=15)
         return r.text.strip()
@@ -72,7 +71,6 @@ def get_tor_ip(session):
 def setup_logger(name='DarkCrawler'):
     os.makedirs('logs', exist_ok=True)
     log_file = f"logs/crawl_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
-    
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s [%(levelname)s] %(message)s',
