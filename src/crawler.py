@@ -1,6 +1,6 @@
 # crawler.py — v2.0
 import time
-import ran
+import random
 import re
 import json
 from concurrent.futures import ThreadPoolExecutor, as_c
