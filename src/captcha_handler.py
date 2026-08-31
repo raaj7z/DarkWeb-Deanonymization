@@ -114,7 +114,7 @@ class CaptchaHandler:
         ]
         
         for headers in headers_list:
-try:
+            try:
                 session.headers.update(headers)
                 r = session.get(url, timeout=30)
                 if r.status_code == 200:
