@@ -184,14 +184,14 @@ crawler = DarkCrawler(
     rotate_every=rotate_every
 )
     
-    # Create session in DB
-    session_id = db.create_session(target, urls)
+ # Create session in DB 
+session_id = db.create_session(target, urls)
     
     # Log the search
-    db.log_search(session_id, 'url_crawl', 
+ db.log_search(session_id, 'url_crawl', 
                   json.dumps(urls), len(urls))
-    
-    # Initialize components
+
+# Initialize components
     checker = AliveChecker(timeout=30, retries=3)
     crawler = DarkCrawler(
         db=db,
