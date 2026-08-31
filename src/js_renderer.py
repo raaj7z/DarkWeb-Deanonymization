@@ -5,7 +5,7 @@ from utils import success, error, info, warn
 
 class JSRenderer:
     
-    def init(self):
+    def __init__(self):
         self.driver = None
         self.available = False
         self._setup()
@@ -98,8 +98,7 @@ class JSRenderer:
             success(f"JS rendered: {title[:40]}")
             return {
                 'html': html,
-
-'title': title,
+                'title': title,
                 'url': self.driver.current_url,
                 'rendered': True
             }
