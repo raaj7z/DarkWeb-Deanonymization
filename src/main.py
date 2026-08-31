@@ -156,6 +156,33 @@ def run_crawl_session(db, session):
         workers = max(1, min(10, workers))
     except:
         workers = 3
+        # Ask about JS rendering
+use_js_input = input("Enable JS rendering for dynamic pages? [y/N]: ").strip().lower()
+use_js = use_js_input == 'y'
+
+# Ask about circuit rotation
+rotate_input = input("Enable Tor circuit rotation? [Y/n]: ").strip().lower()
+rotate = rotate_input != 'n'
+
+# Ask rotation frequency
+rotate_every = 10
+if rotate:
+    try:
+        rotate_every = int(input("Rotate circuit every N requests [default 10]: ").strip() or '10')
+    except:
+        rotate_every = 10
+
+# Initialize crawler with new options
+crawler = DarkCrawler(
+    db=db,
+    session_id=session_id,
+    delay=(1, 3),
+    timeout=30,
+    max_workers=workers,
+    use_js=use_js,
+    rotate_circuits=rotate,
+    rotate_every=rotate_every
+)
     
     # Create session in DB
     session_id = db.create_session(target, urls)
