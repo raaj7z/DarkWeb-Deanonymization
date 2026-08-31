@@ -1,5 +1,5 @@
 # main.py — v2.0
-# FIXED: Custom URL input, history viewing, session management, indentation fixes
+# FIXED: Custom URL input, history viewing, session management
 import sys
 import os
 import json
@@ -10,7 +10,6 @@ from utils import get_tor_session, get_real_ip, get_tor_ip
 from alive_checker import AliveChecker
 from crawler import DarkCrawler
 from database import Database
-
 
 def verify_anonymity():
     session = get_tor_session()
@@ -26,7 +25,6 @@ def verify_anonymity():
     
     success("Anonymity confirmed!")
     return True, session
-
 
 def get_urls_from_user():
     """FIXED: Let user enter custom onion URLs"""
@@ -66,7 +64,6 @@ def get_urls_from_user():
         'http://protonmailrmez3lotccipshtkleegetolb73fuirgj7r4o4vfu7ozyd.onion',
     ]
 
-
 def show_history(db):
     """Show past sessions and searches"""
     print("\n" + "="*50)
@@ -90,7 +87,6 @@ def show_history(db):
             print(f"   Found: {summary.get('usernames', 0)} usernames, "
                   f"{summary.get('posts', 0)} posts")
 
-
 def show_full_stats(db):
     """Show complete database statistics"""
     print("\n" + "="*50)
@@ -99,7 +95,6 @@ def show_full_stats(db):
     stats = db.get_stats()
     for table, count in stats.items():
         print(f"  {table:15} → {count} records")
-
 
 def main_menu(db):
     """Main interactive menu"""
@@ -113,7 +108,6 @@ def main_menu(db):
     print("5. Exit")
     
     return input("\nChoice [1-5]: ").strip()
-
 
 def search_past_data(db):
     """Search existing database for a username"""
@@ -137,7 +131,6 @@ def search_past_data(db):
     # Log this search
     db.log_search('manual', 'username_search', username, len(posts))
 
-
 def run_crawl_session(db, session):
     """Run a complete crawl session"""
     
@@ -151,7 +144,7 @@ def run_crawl_session(db, session):
         error("No URLs provided")
         return
     
-    # Get crawl depth (currently unused but kept for future use)
+    # Get crawl depth
     try:
         depth = int(input("Crawl depth [1=single page, 2=follow links]: ").strip() or '1')
     except:
@@ -163,23 +156,7 @@ def run_crawl_session(db, session):
         workers = max(1, min(10, workers))
     except:
         workers = 3
-
-    # Ask about JS rendering
-    use_js_input = input("Enable JS rendering for dynamic pages? [y/N]: ").strip().lower()
-    use_js = use_js_input == 'y'
-
-    # Ask about circuit rotation
-    rotate_input = input("Enable Tor circuit rotation? [Y/n]: ").strip().lower()
-    rotate = rotate_input != 'n'
-
-    # Ask rotation frequency
-    rotate_every = 10
-    if rotate:
-        try:
-            rotate_every = int(input("Rotate circuit every N requests [default 10]: ").strip() or '10')
-        except:
-            rotate_every = 10
-
+    
     # Create session in DB
     session_id = db.create_session(target, urls)
     
@@ -194,16 +171,13 @@ def run_crawl_session(db, session):
         session_id=session_id,
         delay=(1, 3),
         timeout=30,
-        max_workers=workers,
-        use_js=use_js,
-        rotate_circuits=rotate,
-        rotate_every=rotate_every
+        max_workers=workers
     )
     
     # Step 1: Check alive
     info("\n=== STEP 1: Checking alive URLs ===")
     alive_results = checker.check_multiple(urls)
-    alive_urls = [r['url'] for r in alive_results.get('alive', [])]
+    alive_urls = [r['url'] for r in alive_results['alive']]
     
     if not alive_urls:
         error("No alive URLs. Check Tor connection.")
@@ -253,7 +227,6 @@ def run_crawl_session(db, session):
     
     success(f"Report saved: {report_file}")
 
-
 def main():
     print_banner()
     
@@ -294,7 +267,6 @@ def main():
         
         else:
             warn("Invalid choice")
-
 
 if __name__ == '__main__':
     main()
