@@ -206,7 +206,7 @@ def run_crawl_session(db, session):
     
     # Step 2: Crawl concurrently
     info(f"\n=== STEP 2: Crawling ({workers} workers) ===")
-    results = crawler.crawl_concurrent(alive_urls, target)
+    results = crawler.crawl_concurrent(alive_urls, target_username=target, use_js=use_js)
     
     # Step 3: Summary
     total_usernames = sum(len(r.get('usernames', [])) for r in results)
