@@ -24,7 +24,8 @@ class CaptchaHandler:
         r'ray id',  # Cloudflare
     ]
     
-    def init(self):
+    def __init__(self):
+        # Count of detected CAPTCHAs
         self.detection_count = 0
     
     def is_captcha(self, html, status_code=200):
@@ -56,11 +57,16 @@ class CaptchaHandler:
         ]
         
         for strategy in strategies:
-            info(f"Trying bypass: {strategy.name}")
-            result = strategy(url, session)
-            if result:
-                success(f"Bypass worked: {strategy.name}")
-                return result
+            # Use getattr to safely get the callable name
+            strategy_name = getattr(strategy, '__name__', str(strategy))
+            info(f"Trying bypass: {strategy_name}")
+            try:
+                result = strategy(url, session)
+                if result:
+                    success(f"Bypass worked: {strategy_name}")
+                    return result
+            except Exception as e:
+                warn(f"Bypass strategy {strategy_name} raised: {e}")
             time.sleep(random.uniform(3, 8))
         
         error("All bypass strategies failed")
@@ -75,8 +81,8 @@ class CaptchaHandler:
             r = session.get(url, timeout=30)
             if r.status_code == 200:
                 return r
-        except:
-            pass
+        except Exception as e:
+            warn(f"_strategy_delay failed: {e}")
         return None
     
     def _strategy_new_identity(self, url, session):
@@ -89,8 +95,8 @@ class CaptchaHandler:
             r = session.get(url, timeout=30)
             if r.status_code == 200:
                 return r
-        except:
-            pass
+        except Exception as e:
+            warn(f"_strategy_new_identity failed: {e}")
         return None
     
     def _strategy_different_headers(self, url, session):
@@ -120,7 +126,8 @@ class CaptchaHandler:
                 if r.status_code == 200:
                     return r
                 time.sleep(random.uniform(2, 5))
-            except:
+            except Exception as e:
+                warn(f"_strategy_different_headers failed for headers {headers.get('User-Agent','')[:30]}: {e}")
                 continue
         return None
     
@@ -136,8 +143,8 @@ class CaptchaHandler:
             r = session.get(url, timeout=45)
             if r.status_code == 200:
                 return r
-        except:
-            pass
+        except Exception as e:
+            warn(f"_strategy_slow_request failed: {e}")
         return None
     
     def get_stats(self):
