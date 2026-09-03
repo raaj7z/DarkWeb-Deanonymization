@@ -33,7 +33,8 @@ class DarkCrawler:
         self.request_count = 0
         self.rotate_every = rotate_every
         self.logger = setup_logger()
-        
+                     
+        self.intel = IntelExtractor()
         # NEW: Initialize advanced components
         self.captcha = CaptchaHandler()
         
