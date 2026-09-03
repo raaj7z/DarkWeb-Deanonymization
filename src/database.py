@@ -148,6 +148,96 @@ class Database:
                 completed_at TIMESTAMP
             )
         ''')
+
+        # Crypto addresses table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS crypto_addresses (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT,
+                currency TEXT,
+                address TEXT,
+                context TEXT,
+                source_url TEXT,
+                found_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
+        # Misconfigs table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS misconfigs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT,
+                url TEXT,
+                misconfig_type TEXT,
+                severity TEXT,
+                detail TEXT,
+                found_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
+        # Server fingerprints table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS server_fingerprints (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT,
+                url TEXT,
+                server_software TEXT,
+                backend_language TEXT,
+                framework TEXT,
+                database_hints TEXT,
+                os_hints TEXT,
+                cdn TEXT,
+                ssl_info TEXT,
+                found_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
+        # Profiles table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS profiles (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT,
+                source_url TEXT,
+                pgp_keys TEXT,
+                contact_methods TEXT,
+                communication_channels TEXT,
+                aliases TEXT,
+                found_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
+        # Posts with timing table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS timed_posts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT,
+                source_url TEXT,
+                username TEXT,
+                content TEXT,
+                word_count INTEGER,
+                timestamps TEXT,
+                hour_of_day INTEGER,
+                timezone_estimate TEXT,
+                has_crypto BOOLEAN,
+                has_links BOOLEAN,
+                extracted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
+        # Timing analysis table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS timing_analysis (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT,
+                target_username TEXT,
+                peak_hours TEXT,
+                average_hour REAL,
+                timezone_estimate TEXT,
+                activity_pattern TEXT,
+                total_posts INTEGER,
+                analyzed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
         
         self.conn.commit()
         success("Database tables ready")
@@ -280,6 +370,122 @@ class Database:
             self.conn.commit()
         except Exception as e:
             error(f"save_link: {e}")
+
+    # ── SAVING EXTENDED DATA ──
+    def save_crypto(self, session_id, currency, address, context, source_url):
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute('''
+                INSERT INTO crypto_addresses 
+                (session_id, currency, address, context, source_url)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (session_id, currency, address, context, source_url))
+            self.conn.commit()
+        except Exception as e:
+            error(f"save_crypto: {e}")
+
+    def save_misconfig(self, session_id, url, misconfig_type, severity, detail):
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute('''
+                INSERT INTO misconfigs 
+                (session_id, url, misconfig_type, severity, detail)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (session_id, url, misconfig_type, severity, detail))
+            self.conn.commit()
+        except Exception as e:
+            error(f"save_misconfig: {e}")
+
+    def save_fingerprint(self, session_id, url, fingerprint):
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute('''
+                INSERT INTO server_fingerprints
+                (session_id, url, server_software, backend_language,
+                 framework, database_hints, os_hints, cdn)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                session_id, url,
+                fingerprint.get('server_software', ''),
+                fingerprint.get('backend_language', ''),
+                fingerprint.get('framework', ''),
+                json.dumps(fingerprint.get('database_hints', [])),
+                json.dumps(fingerprint.get('os_hints', [])),
+                fingerprint.get('cdn', '')
+            ))
+            self.conn.commit()
+        except Exception as e:
+            error(f"save_fingerprint: {e}")
+
+    def save_profile(self, session_id, url, profile):
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute('''
+                INSERT INTO profiles
+                (session_id, source_url, pgp_keys, contact_methods,
+                 communication_channels, aliases)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ''', (
+                session_id, url,
+                json.dumps(profile.get('pgp_keys', [])),
+                json.dumps(profile.get('contact_methods', {})),
+                json.dumps(profile.get('communication_channels', [])),
+                json.dumps(profile.get('aliases', []))
+            ))
+            self.conn.commit()
+        except Exception as e:
+            error(f"save_profile: {e}")
+
+    def save_timed_post(self, session_id, url, post, timezone_estimate):
+        try:
+            cursor = self.conn.cursor()
+            hours = []
+            for ts in post.get('timestamps', []):
+                import re
+                h = re.search(r'(\d{2}):\d{2}', ts)
+                if h:
+                    hours.append(int(h.group(1)))
+            avg_hour = sum(hours)/len(hours) if hours else 0
+            
+            cursor.execute('''
+                INSERT INTO timed_posts
+                (session_id, source_url, username, content, word_count,
+                 timestamps, hour_of_day, timezone_estimate, has_crypto, has_links)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                session_id, url,
+                post.get('username', 'unknown'),
+                post.get('text', '')[:3000],
+                post.get('word_count', 0),
+                json.dumps(post.get('timestamps', [])),
+                round(avg_hour),
+                timezone_estimate,
+                post.get('has_crypto', False),
+                post.get('has_links', False)
+            ))
+            self.conn.commit()
+        except Exception as e:
+            error(f"save_timed_post: {e}")
+
+    def save_timing_analysis(self, session_id, username, analysis):
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute('''
+                INSERT INTO timing_analysis
+                (session_id, target_username, peak_hours, average_hour,
+                 timezone_estimate, activity_pattern, total_posts)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                session_id, username,
+                json.dumps(analysis.get('peak_hours', [])),
+                analysis.get('average_hour', 0),
+                analysis.get('timezone_estimate', ''),
+                analysis.get('activity_pattern', ''),
+                analysis.get('total_timestamps', 0)
+            ))
+            self.conn.commit()
+        except Exception as e:
+            error(f"save_timing_analysis: {e}")
     
     # ── QUERIES ──
     def get_posts_by_username(self, username, session_id=None):
@@ -341,3 +547,4 @@ class Database:
     
     def close(self):
         self.conn.close()
+
