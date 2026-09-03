@@ -4,6 +4,7 @@ import time
 import random
 import re
 import json
+from intel_extractor import IntelExtractor
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from bs4 import BeautifulSoup
 from datetime import datetime
