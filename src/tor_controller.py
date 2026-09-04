@@ -5,7 +5,7 @@ from utils import success, error, info, warn
 
 class TorController:
     
-    def init(self, port=9051, password=''):
+    def __init__(self, port=9051, password=''):
         self.port = port
         self.password = password
         self.controller = None
