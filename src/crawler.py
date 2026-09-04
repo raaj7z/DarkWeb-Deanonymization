@@ -325,6 +325,51 @@ class DarkCrawler:
                 url
             )
         
+        # Full intelligence extraction
+        intel = self.intel.full_extract(
+            url=url,
+            html=html,
+            headers=dict(response.headers) if not isinstance(response, dict) else {},
+            target_username=target_username
+        )
+        
+        # Save all intel to database
+        # Crypto
+        for currency, addresses in intel['crypto_addresses'].items():
+            for addr in addresses:
+                context = self.intel.analyze_crypto_context(text, addr)
+                self.db.save_crypto(self.session_id, currency, addr, context, url)
+        
+        # Misconfigs
+        for finding in intel['misconfigs']['found']:
+            severity = intel['misconfigs']['severity'].get(finding.split(':')[0], 'MEDIUM')
+            self.db.save_misconfig(self.session_id, url, finding, severity, finding)
+        
+        # Server fingerprint
+        self.db.save_fingerprint(self.session_id, url, intel['server_fingerprint'])
+        
+        # Profiles
+        self.db.save_profile(self.session_id, url, intel['profiles'])
+        
+        # Timed posts
+        tz = intel['timing_analysis'].get('timezone_estimate', '')
+        for post in intel['posts_with_timing']:
+            self.db.save_timed_post(self.session_id, url, post, tz)
+        
+        # Timing analysis
+        if intel['timing_analysis'] and target_username:
+            self.db.save_timing_analysis(
+                self.session_id, target_username, intel['timing_analysis']
+            )
+        
+        # Add intel to result
+        result['intel'] = intel
+        result['crypto_addresses'] = intel['crypto_addresses']
+        result['misconfigs'] = intel['misconfigs']
+        result['server_fingerprint'] = intel['server_fingerprint']
+        result['profiles'] = intel['profiles']
+        result['timing_analysis'] = intel['timing_analysis']
+        
         # Take screenshot if JS rendered
         if result['js_rendered'] and self.js_renderer:
             safe_name = url.replace('://', '_').replace('/', '_')[:30]
