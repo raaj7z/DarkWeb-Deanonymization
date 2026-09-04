@@ -1,56 +1,101 @@
-# DarkWeb-Deanonymization
+# DarkWeb-Deanonymization v3.0
 
-Dark web intelligence system for Tor hidden service deanonymization, cross-platform threat actor profiling, and clearnet entity attribution.
+**Advanced Tor Hidden Service Deanonymization & Threat Actor Profiling System**
 
-> **⚠️ Legal & Ethical Notice**: This tool is designed for authorized security research, law enforcement, and defensive cybersecurity purposes only. Unauthorized access to computer systems is illegal. Users must comply with all applicable laws and obtain proper authorization before use.
+Enterprise-grade Python framework for dark web intelligence gathering, actor relationship mapping, and clearnet entity attribution through behavioral analysis and infrastructure fingerprinting.
 
----
-
-## 📋 Table of Contents
-
-- [Overview](#overview)
-- [Features](#features)
-- [System Requirements](#system-requirements)
-- [Installation](#installation)
-- [Configuration](#configuration)
-- [Usage](#usage)
-- [Modules](#modules)
-- [Output & Reporting](#output--reporting)
-- [Architecture](#architecture)
-- [Troubleshooting](#troubleshooting)
-- [Contributing](#contributing)
-- [License](#license)
+> **⚠️ Legal & Ethical Notice**: This tool is designed for authorized law enforcement, government agencies, and authorized security research ONLY. Unauthorized access to computer systems is illegal under the Computer Fraud & Abuse Act (CFAA) and applicable international law. All users are responsible for compliance.
 
 ---
 
 ## 🎯 Overview
 
-**DarkWeb-Deanonymization** is a Python-based OSINT framework that automates dark web reconnaissance. It:
+**DarkWeb-Deanonymization v3.0** is a comprehensive Python OSINT framework that automates dark web reconnaissance with enterprise intelligence capabilities:
 
-- ✅ Crawls `.onion` hidden services through the Tor network
-- ✅ Extracts threat actor identities (usernames, emails, crypto addresses)
-- ✅ Profiles cross-platform activity and behavioral patterns
-- ✅ Correlates clearnet entities with dark web presence
-- ✅ Generates structured intelligence reports
-- ✅ Maintains SQLite database for analysis and trending
+### Core Capabilities
 
-The system combines **web scraping**, **regex pattern matching**, and **Tor anonymization** to uncover operational security failures and link disparate threat actors.
+✅ **Web Scraping** — Tor-routed crawling of `.onion` hidden services  
+✅ **Data Extraction** — Usernames, emails, crypto addresses, posts, timestamps  
+✅ **Behavioral Analysis** — Timing analysis, timezone estimation, activity patterns  
+✅ **Infrastructure Fingerprinting** — Server banners, SSL certificates, Tor descriptors  
+✅ **Trust Network Mapping** — Actor relationships, vouches, wallet associations  
+✅ **Origin Attribution** — Clearnet domain matching via SSL SANs and exposed IPs  
+✅ **Autonomous Crawling** — Continuous unattended reconnaissance with URL discovery  
+✅ **Timeline Queries** — Temporal analysis for activity correlation  
+✅ **Persistent Storage** — SQLite database with full session history  
+✅ **Enterprise Reporting** — JSON exports, actor profiles, relationship graphs  
 
 ---
 
-## ✨ Features
+## 📋 Table of Contents
+
+- [What's New in v3.0](#whats-new-in-v30)
+- [Key Features](#key-features)
+- [System Requirements](#system-requirements)
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [Menu Options](#menu-options)
+- [Advanced Usage](#advanced-usage)
+- [Database Schema](#database-schema)
+- [Output Formats](#output-formats)
+- [Deanonymization Techniques](#deanonymization-techniques)
+- [Troubleshooting](#troubleshooting)
+- [Legal Notice](#legal-notice)
+
+---
+
+## 🆕 What's New in v3.0
+
+### Major Enhancements
 
 | Feature | Description |
 |---------|-------------|
-| **Tor Integration** | SOCKS proxy through Tor with automatic identity rotation |
-| **Multi-threaded Crawling** | Parallel requests with randomized delays to avoid detection |
-| **Alive Site Checker** | Quickly identifies responsive `.onion` services with retry logic |
-| **Data Extraction** | Usernames, emails, timestamps, crypto addresses, posts, links |
-| **Post Filtering** | Target-specific username searches across forums |
-| **Database Storage** | SQLite persistence with indexed queries |
-| **JSON Reports** | Exportable results for further analysis |
-| **Anti-Detection** | Random user agents, request delays, session rotation |
-| **Error Handling** | Automatic retries, timeout management, graceful degradation |
+| **Service Banner Grabbing** | Extract server signatures from open ports (SSH, HTTP, FTP, SMTP, MySQL) |
+| **SSL Certificate Analysis** | Find clearnet domains in SSL Subject Alternative Names (SANs) |
+| **Tor Descriptor Checking** | Detect descriptor inconsistencies revealing origin infrastructure |
+| **Trust Link Extraction** | Build actor relationship graphs (vouches, wallets, PGP signatures) |
+| **Autonomous Crawl Mode** | Runs continuously without manual intervention; auto-discovers URLs |
+| **Timeline Query System** | Search crawls by date range with temporal analysis |
+| **Actor Relationship Viewer** | Visualize trust networks and cross-platform correlations |
+| **Full Intelligence Extraction** | Comprehensive metadata including cryptography, misconfigs, profiles |
+| **Advanced Database** | New tables: `service_banners`, `descriptor_checks`, `trust_links`, `timeline_crawls` |
+
+### Performance Improvements
+
+- ⚡ Concurrent banner grabbing with timeouts
+- ⚡ SSL certificate fetching via SOCKS5 Tor proxy
+- ⚡ Optimized descriptor checking with regex patterns
+- ⚡ Wallet address correlation across posts
+
+---
+
+## ✨ Key Features
+
+### Intelligence Extraction
+
+| Module | Extraction Type | Use Case |
+|--------|-----------------|----------|
+| **Usernames** | Regex + BeautifulSoup parsing | Actor identification |
+| **Emails** | RFC 5322 regex | Contact information tracking |
+| **Crypto Addresses** | Bitcoin, Monero, Ethereum patterns | Financial attribution |
+| **Posts** | DOM/CSS selectors | Activity timeline |
+| **Timestamps** | Multiple datetime formats | Timezone/activity profiling |
+| **Links** | `.onion` and clearnet URLs | Network mapping |
+| **Service Banners** | Port probing (80, 443, 22, 21, 3306) | Server identification |
+| **SSL Certificates** | Subject CN, SANs | Origin server attribution |
+| **Tor Descriptors** | Inconsistency detection | Real IP/domain leakage |
+| **Trust Networks** | Vouches, references, wallets | Actor correlation |
+
+### System Capabilities
+
+- **Multi-threaded Crawling** — Parallel requests with configurable workers (1-10)
+- **Tor Integration** — SOCKS5 proxy with automatic circuit rotation
+- **CAPTCHA Detection** — Identifies and logs CAPTCHA blocks
+- **JavaScript Rendering** — Optional headless browser for dynamic content
+- **Session Management** — Tracks all crawls with session IDs and timelines
+- **Database Persistence** — SQLite with WAL mode for concurrent writes
+- **Anti-Detection** — Random user agents, delays, identity rotation
+- **Error Recovery** — Automatic retries, timeouts, graceful degradation
 
 ---
 
@@ -58,23 +103,21 @@ The system combines **web scraping**, **regex pattern matching**, and **Tor anon
 
 ### Minimum Specifications
 
-- **OS**: Linux, macOS, or Windows (WSL2 recommended)
+- **OS**: Linux, macOS, or Windows (WSL2)
 - **Python**: 3.8+
-- **Memory**: 512 MB
-- **Disk**: 500 MB (for database and reports)
+- **RAM**: 512 MB minimum, 2 GB recommended
+- **Disk**: 1 GB (for database and reports)
 - **Network**: Stable internet connection
-- **Tor**: Must be installed and running locally
+- **Tor**: Must be installed and running locally on port 9050
 
 ### Dependencies
 
-See `requirements.txt`:
-
 ```
-requests[socks]==2.31.0       # HTTP client with SOCKS support
+requests[socks]==2.31.0       # HTTP + SOCKS proxy
 beautifulsoup4==4.12.2        # HTML parsing
-colorama==0.4.6               # Colored terminal output
+colorama==0.4.6               # Terminal colors
 tqdm==4.66.1                  # Progress bars
-fake-useragent==1.4.0         # Random user agent spoofing
+fake-useragent==1.4.0         # User agent spoofing
 ```
 
 ---
@@ -85,307 +128,284 @@ fake-useragent==1.4.0         # Random user agent spoofing
 
 **Ubuntu/Debian:**
 ```bash
-sudo apt-get update
-sudo apt-get install tor -y
+sudo apt-get update && sudo apt-get install tor -y
+sudo service tor start
 ```
 
 **macOS (Homebrew):**
 ```bash
 brew install tor
+brew services start tor
 ```
 
 **Windows:**
-Download from https://www.torproject.org/download/ and follow the installer.
+Download from https://www.torproject.org/download/
 
-### Step 2: Clone Repository
+### Step 2: Clone & Setup
 
 ```bash
 git clone https://github.com/raaj7z/DarkWeb-Deanonymization.git
 cd DarkWeb-Deanonymization
-```
-
-### Step 3: Create Virtual Environment
-
-```bash
 python3 -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
-
-### Step 4: Install Dependencies
-
-```bash
+source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### Step 5: Start Tor Service
+### Step 3: Verify Tor Connection
 
 ```bash
-# Linux/macOS
-sudo service tor start
-
-# Check Tor status
-sudo service tor status
-
-# macOS (Homebrew)
-brew services start tor
-
-# Windows (from Tor Browser folder)
-tor.exe
+curl -x socks5://127.0.0.1:9050 https://check.torproject.org -v
 ```
 
-Verify Tor is listening:
-```bash
-curl -x socks5://127.0.0.1:9050 https://www.example.com -v
-```
-
----
-
-## ⚙️ Configuration
-
-Create a `config.py` in the project root (optional):
-
-```python
-# Tor Configuration
-TOR_SOCKS_HOST = "127.0.0.1"
-TOR_SOCKS_PORT = 9050
-
-# Crawler Settings
-DEFAULT_TIMEOUT = 30           # Seconds
-REQUEST_DELAY = (2, 5)         # Random range in seconds
-MAX_RETRIES = 3                # Retry attempts per URL
-MAX_DEPTH = 2                  # Link recursion depth
-
-# Database
-DB_PATH = "darkweb_intel.db"
-
-# Output
-REPORTS_DIR = "reports"
-LOGS_DIR = "logs"
-
-# Anti-Detection
-RANDOM_USER_AGENTS = True
-ROTATE_IDENTITY = True         # Refresh Tor identity between sites
-```
-
----
-
-## 🚀 Usage
-
-### Basic Usage
+### Step 4: Run
 
 ```bash
 cd src
 python3 main.py
 ```
 
-The script will:
+---
 
-1. **Verify Tor Connection** — Confirm anonymity by comparing real IP vs Tor IP
-2. **Check Alive Sites** — Ping target `.onion` services (DuckDuckGo, ProtonMail)
-3. **Crawl & Extract** — Search for usernames, timestamps, posts
-4. **Save Results** — Export to `reports/crawl_results.json`
-5. **Display Stats** — Show database record counts
-
-#### Example Output:
+## 🚀 Quick Start
 
 ```
 ╔══════════════════════════════════════════════════════════════╗
 ║     Dark Web Intelligence & Threat Actor Deanonymization    ║
-║                     DarkWeb Crawler v1.0                     ║
+║                  DarkWeb Crawler v3.0                        ║
 ╚══════════════════════════════════════════════════════════════╝
 
-[INFO] Starting Dark Web Crawler...
-[INFO] Verifying Tor connection...
+[INFO] Checking anonymity...
 [INFO] Real IP:  203.0.113.42
 [INFO] Tor IP:   198.51.100.89
-[SUCCESS] Anonymity confirmed — IPs are different!
+[SUCCESS] Anonymity confirmed!
 
-=== STEP 1: Checking which URLs are alive ===
-[SUCCESS] http://duckduckgogg42xjoc72x3sjasowoarfbgcmvfimaftt6twagswzczad.onion is ALIVE
-[SUCCESS] Found 2 alive URLs
+[MAIN MENU]
+1. Start new crawl session
+2. View session history
+3. View database stats
+4. Search past data by username
+5. Exit
+6. Autonomous crawl mode
+7. Query timeline
+8. View actor relationships
 
-=== STEP 2: Crawling alive URLs ===
-Enter target username to search (or press Enter to crawl all): 
-[SUCCESS] Fetched: http://duckduckgogg42xjoc72x3sjasowoarfbgcmvfimaftt6twagswzczad.onion...
-[SUCCESS] Crawl complete!
-[INFO] Usernames found: 42
-[INFO] Posts extracted: 156
-[INFO] Emails: 8
-[INFO] Crypto addresses: {'bitcoin': 3, 'monero': 1}
-
-=== STEP 3: Database Stats ===
-[INFO] sites: 2 records
-[INFO] pages: 2 records
-[INFO] usernames: 42 records
-[INFO] posts: 156 records
-
-[SUCCESS] Results saved to reports/crawl_results.json
-[SUCCESS] Crawl session complete!
+Choice [1-8]: _
 ```
 
-### Advanced Usage - Python API
+---
+
+## 📊 Menu Options
+
+### Option 1: Start New Crawl Session
+Standard web crawling with full extraction pipeline.
+
+**Parameters:**
+- Target username (optional) — Filter posts by actor name
+- Onion URLs — Enter custom or use defaults
+- Crawl depth — Single page or follow links
+- Concurrent workers — 1-10 threads
+- JS rendering — Enable for dynamic content
+- Circuit rotation — Auto-rotate Tor identity
+
+**Output:** Session saved to DB, JSON report generated
+
+### Option 2: View Session History
+Browse all past crawl sessions with results summary.
+
+**Shows:**
+- Session ID, target username, status
+- Usernames found, posts extracted
+- Crawl timestamps
+
+### Option 3: View Database Stats
+Complete statistics across all tables.
+
+**Displays:**
+- Sites, pages, usernames, posts, links
+- Crypto addresses, misconfigs, fingerprints
+- Trust links, timeline crawls
+
+### Option 4: Search Past Data
+Query existing database by username.
+
+**Returns:**
+- Post count, source URLs
+- Recent content snippets
+- Timeline of activity
+
+### Option 5: Exit
+Close database and terminate.
+
+### Option 6: Autonomous Crawl Mode ⭐
+
+**Runs continuously without manual input:**
+- Duration: Hours of crawling
+- Interval: Minutes between crawl cycles
+- URL Discovery: Auto-crawls links found in pages
+- Target Username: Optional actor tracking
+
+**Output:** Session persisted, all data to database
+
+### Option 7: Query Timeline ⭐
+
+**Search crawls within date range:**
+- Start date: `YYYY-MM-DD`
+- End date: `YYYY-MM-DD`
+- Optional URL filter
+
+**Returns:**
+- Descriptor issues detected
+- Trust links found
+- Temporal distribution
+
+### Option 8: View Actor Relationships ⭐
+
+**Display trust network:**
+- Actor username (optional)
+- Shows vouch relationships
+- Displays wallet associations
+- Cross-references
+
+**Output:** Relationship graph for analysis
+
+---
+
+## 🔧 Advanced Usage
+
+### Python API Example
 
 ```python
 from src.crawler import DarkCrawler
 from src.database import Database
 from src.alive_checker import AliveChecker
-from src.utils import get_tor_session, verify_tor
 
 # Initialize
 db = Database()
-crawler = DarkCrawler(db=db, delay=(2, 5), timeout=30)
+crawler = DarkCrawler(db=db, max_workers=5, rotate_circuits=True)
 checker = AliveChecker(timeout=30, retries=3)
 
-# Check if site is alive
-result = checker.check('http://example.onion')
-print(f"Status: {result['status']}")
-
-# Crawl single URL
-data = crawler.crawl('http://example.onion', target_username='actor_xyz', depth=2)
-
-# Crawl multiple URLs
-urls = ['http://site1.onion', 'http://site2.onion']
-results = crawler.crawl_multiple(urls, target_username='actor_xyz')
-
-# Query database
-stats = db.get_stats()
-usernames = db.get_usernames_by_site('http://example.onion')
-```
-
----
-
-## 📁 Modules
-
-### `crawler.py`
-**Core web scraping engine**
-
-```python
-DarkCrawler(db, delay=(2,5), timeout=30, max_retries=3)
-```
-
-**Key Methods:**
-
-- `fetch(url)` — Retrieve page with Tor SOCKS proxy, retry logic
-- `extract_usernames(html, url)` — Regex + BeautifulSoup parsing
-- `extract_emails(text)` — Email regex extraction
-- `extract_crypto_addresses(text)` — Bitcoin/Monero/Ethereum patterns
-- `extract_links(html, base_url)` — Find `.onion` and clearnet links
-- `extract_posts(html, target_username)` — Forum post extraction
-- `extract_timestamps(html)` — Timezone/activity pattern detection
-- `crawl(url, target_username, depth)` — Main crawl function with recursion
-- `crawl_multiple(urls, target_username)` — Batch processing
-
-**Example:**
-```python
-result = crawler.crawl('http://darkforum.onion', target_username='alice', depth=1)
-print(result['usernames'])      # ['alice_2024', 'alice_dev', ...]
-print(result['emails'])         # ['alice@riseup.net', ...]
-print(result['crypto_addresses']) # {'bitcoin': ['1A1...'], 'monero': ['4...']...}
-```
-
----
-
-### `alive_checker.py`
-**Fast availability scanning**
-
-```python
-AliveChecker(timeout=30, retries=3)
-```
-
-**Key Methods:**
-
-- `check(url)` — Single URL availability check
-- `check_multiple(urls)` — Batch check with progress bar
-- Returns: `{'alive': [...], 'dead': [...], 'unknown': [...]}`
-
-**Example:**
-```python
-checker = AliveChecker()
-results = checker.check_multiple([
-    'http://forum1.onion',
-    'http://forum2.onion',
+# Check alive sites
+alive = checker.check_multiple([
+    'http://forum.onion',
     'http://market.onion'
 ])
-print(f"Alive: {len(results['alive'])}")
+
+# Crawl with full extraction
+result = crawler.crawl_single(
+    'http://forum.onion',
+    target_username='actor_xyz'
+)
+
+# Access results
+print(f"Usernames: {result['usernames']}")
+print(f"Crypto: {result['crypto_addresses']}")
+print(f"Trust links: {result['trust_links']}")
+
+# Timeline crawling
+timeline = crawler.crawl_with_timeline('http://site.onion', 'actor_xyz')
+print(f"Crawled: {timeline['timeline']['crawled_at']}")
+print(f"Descriptor issues: {timeline['descriptor']['inconsistencies']}")
+
+# Autonomous crawl
+auto_result = crawler.autonomous_crawl(
+    seed_urls=['http://forum.onion'],
+    target_username='actor',
+    duration_hours=2,
+    interval_minutes=30
+)
+print(f"URLs discovered: {auto_result['total_urls']}")
+```
+
+### Banner Grabbing
+
+```python
+crawler = DarkCrawler(db=db)
+banner = crawler.grab_service_banner('example.onion', port=443, timeout=5)
+print(f"Service: {banner['service']}")
+print(f"Version: {banner['version']}")
+print(f"Vulnerabilities: {banner['vulnerabilities']}")
+```
+
+### SSL Certificate Extraction
+
+```python
+ssl_result = crawler.match_ssl_to_clearnet('https://example.onion')
+print(f"Clearnet domains found: {ssl_result['clearnet_domains']}")
+print(f"Confidence: {ssl_result['confidence']}")  # LOW/MEDIUM/HIGH
+```
+
+### Trust Network Analysis
+
+```python
+trust_links = crawler.extract_trust_links(html, 'http://forum.onion')
+print(f"Relationships: {trust_links['relationship_edges']}")
+print(f"Wallet links: {trust_links['wallet_links']}")
 ```
 
 ---
 
-### `database.py`
-**SQLite persistence layer**
+## 🗄️ Database Schema
 
-**Schema:**
+### Core Tables
+
+| Table | Purpose |
+|-------|---------|
+| `sessions` | Crawl session metadata |
+| `sites` | `.onion` services |
+| `pages` | Full HTML snapshots |
+| `usernames` | Extracted identities |
+| `posts` | Forum messages |
+| `links` | URL cross-references |
+
+### Intelligence Tables
+
+| Table | Purpose |
+|-------|---------|
+| `crypto_addresses` | Bitcoin/Monero/Ethereum addresses |
+| `misconfigs` | Security misconfigurations |
+| `server_fingerprints` | Server software, language, framework |
+| `profiles` | PGP keys, contact methods, aliases |
+| `timed_posts` | Posts with timing analysis |
+| `timing_analysis` | Activity patterns per actor |
+
+### Deanonymization Tables
+
+| Table | Purpose |
+|-------|---------|
+| `service_banners` | Port 80/443/22/21/3306 banners |
+| `descriptor_checks` | Tor descriptor inconsistencies |
+| `trust_links` | Actor relationship graph |
+| `timeline_crawls` | Temporal crawl data |
+
+### Queries
+
 ```sql
-sites          — Crawled .onion services
-pages          — Full HTML + text snapshots
-usernames      — Extracted identities with source URLs
-emails         — Contact information
-posts          — Forum messages and comments
-links          — Cross-references between sites
-```
+-- Find all usernames on a site
+SELECT DISTINCT username FROM usernames 
+WHERE source_url LIKE '%example.onion%';
 
-**Key Methods:**
+-- Timeline of posts by actor
+SELECT timestamp_found, content FROM posts 
+WHERE username='actor_xyz' 
+ORDER BY extracted_at DESC;
 
-- `save_site(url, title, status_code, alive, server)` — Register a site
-- `save_username(username, source_url)` — Store identity
-- `save_post(username, content, timestamp, source_url)` — Archive posts
-- `get_usernames_by_site(url)` — Query identities by site
-- `get_posts_by_username(username)` — Timeline of activity
-- `get_stats()` — Database statistics
-- `close()` — Commit and close connection
+-- Wallet associations
+SELECT from_actor, to_actor, wallet_address 
+FROM trust_links 
+WHERE link_type='wallet';
 
-**Example:**
-```python
-db = Database()
-usernames = db.get_usernames_by_site('http://forum.onion')
-for user in usernames:
-    posts = db.get_posts_by_username(user)
-    print(f"{user}: {len(posts)} posts")
-db.close()
+-- Crawls in date range
+SELECT * FROM timeline_crawls 
+WHERE date BETWEEN '2024-08-01' AND '2024-08-31';
 ```
 
 ---
 
-### `utils.py`
-**Helper functions & Tor integration**
+## 📤 Output Formats
 
-**Key Functions:**
+### JSON Report
 
-- `get_tor_session()` — Create requests.Session with SOCKS5 proxy
-- `verify_tor()` — Check if Tor is running and responsive
-- `get_real_ip()` — Fetch clearnet IP (for comparison)
-- `get_tor_ip(session)` — Fetch Tor exit node IP
-- `print_banner()` — ASCII art header
-- `info()`, `success()`, `error()`, `warn()` — Colored logging
-- `setup_logger()` — File + console logging configuration
-
-**Example:**
-```python
-from src.utils import get_tor_session, verify_tor
-
-session = get_tor_session()
-response = session.get('http://example.onion', timeout=30)
-```
-
----
-
-### `main.py`
-**Orchestration & full workflow**
-
-Runs complete investigation pipeline:
-1. Tor verification
-2. Alive site checking
-3. Multi-URL crawling
-4. Database persistence
-5. JSON report generation
-
----
-
-## 📊 Output & Reporting
-
-### JSON Report Format
-
-**File:** `reports/crawl_results.json`
+**File:** `reports/session_{SESSION_ID}.json`
 
 ```json
 [
@@ -394,249 +414,167 @@ Runs complete investigation pipeline:
     "title": "Underground Forum",
     "usernames": ["actor_001", "threat_xyz"],
     "emails": ["actor@riseup.net"],
-    "posts_count": 45,
-    "timestamps": ["2024-08-28 14:23:45", "2024-08-28 15:10:12"],
-    "crypto": {
+    "crypto_addresses": {
       "bitcoin": ["1A1z7agoat..."],
       "monero": ["4..."]
     },
-    "success": true
+    "posts_count": 45,
+    "success": true,
+    "intel": {
+      "server_fingerprint": {...},
+      "misconfigs": {...},
+      "profiles": {...},
+      "timing_analysis": {...}
+    }
   }
 ]
 ```
 
-### Database Queries
+### Timeline Data
 
-```bash
-# View all sites
-sqlite3 darkweb_intel.db "SELECT url, title, alive FROM sites;"
+```
+Date: 2024-08-28 | Hour: 14:00 (Tuesday)
+URL: http://forum.onion/users/actor_xyz
+Issues: 2 | Trust links: 3
+```
 
-# Find usernames associated with a site
-sqlite3 darkweb_intel.db "SELECT DISTINCT username FROM usernames WHERE source_url LIKE '%forum%';"
+### Actor Relationships
 
-# Timeline of posts by user
-sqlite3 darkweb_intel.db "SELECT timestamp, content FROM posts WHERE username='actor_001' ORDER BY timestamp DESC;"
+```
+alice → bob [VOUCH]
+  Source: http://forum.onion/...
 
-# Count crypto addresses
-sqlite3 darkweb_intel.db "SELECT address FROM emails LIMIT 10;"
+Wallet: 1A1z7agoat2dwjw9w...
+  Source: http://market.onion/...
 ```
 
 ---
 
-## 🏗️ Architecture
+## 🔓 Deanonymization Techniques
 
-```
-DarkWeb-Deanonymization/
-├── src/
-│   ├── main.py              # Entry point
-│   ├── crawler.py           # Core scraping engine
-│   ├── alive_checker.py     # Availability scanner
-│   ├── database.py          # SQLite ORM
-│   ├── utils.py             # Tor + logging utilities
-│   └── __init__.py
-├── reports/                 # JSON output
-├── logs/                    # Application logs
-├── darkweb_intel.db         # SQLite database (auto-created)
-├── requirements.txt         # Python dependencies
-├── README.md                # This file
-└── config.py               # Optional configuration
-```
+### 1. Service Banner Grabbing
+Connects to common ports (80, 443, 22, 21, 3306) and extracts banners revealing real server software.
 
-### Data Flow
+**Default banners** (e.g., Apache/2.4.41) indicate misconfiguration and can be correlated to known infrastructure.
 
-```
-┌───��─────────────┐
-│  Target URLs    │
-└────────┬────────┘
-         │
-         ▼
-┌──────────────────────────┐
-│   Alive Checker          │  SOCKS5/Tor
-│   (Filter responsive)    │  Proxy
-└────────┬─────────────────┘
-         │
-         ▼
-┌────────────────────────────┐
-│   Dark Crawler             │
-│   • Fetch HTML             │
-│   • Extract patterns       │  Retry logic
-│   • Detect identities      │  Anti-evasion
-└────────┬───────────────────┘
-         │
-    ┌────┴─────┬──────┬─────┐
-    ▼          ▼      ▼     ▼
-┌────────┐ ┌───────┐ ┌───┐ ┌──────┐
-│Users   │ │Posts  │ │IPs│ │Crypto│
-├────────┤ ├───────┤ └───┘ ├──────┤
-│Emails  │ │Links  │       │Addrs │
-└────────┘ └───────┘       └──────┘
-    │          │              │
-    └──────────┼──────────────┘
-               ▼
-       ┌─────────────────┐
-       │  SQLite DB      │
-       │  (Persistence)  │
-       └─────────────────┘
-               │
-               ▼
-       ┌──────────────────┐
-       │ JSON Report      │
-       │ Intelligence     │
-       └──────────────────┘
-```
+### 2. SSL Certificate Analysis ⭐
+Fetches SSL certificates through Tor SOCKS5 proxy and extracts:
+- Subject Alternative Names (SANs) — Often contain real domain
+- Common Name (CN) — May reveal clearnet domain
+- Issuer — Correlates CA issuance patterns
+
+**Most powerful technique** for origin attribution.
+
+### 3. Tor Descriptor Checking
+Analyzes hidden service descriptor for:
+- Clearnet URL references in HTML
+- Exposed public IP addresses
+- Clearnet email addresses
+- Server date/timezone mismatches
+
+### 4. Trust Network Correlation
+Links actors through:
+- Vouch relationships ("verified by user X")
+- Wallet associations (same Bitcoin address = same actor)
+- PGP signature chains
+- Email references across platforms
+
+### 5. Timing Analysis
+Correlates posting patterns:
+- Peak activity hours
+- Timezone estimation
+- Cross-platform consistency
+- Activity pattern matching
+
+### 6. Behavioral Profiling
+Analyzes:
+- Post frequency and duration
+- Language patterns
+- Technical sophistication
+- Cryptocurrency usage patterns
 
 ---
 
 ## 🔧 Troubleshooting
 
-### **Tor Connection Errors**
+### Tor Connection Issues
 
-**Problem:** `[ERROR] WARNING: Real IP and Tor IP are the same`
-
-**Solution:**
 ```bash
-# Verify Tor is running
+# Check Tor status
 sudo service tor status
 
 # Restart Tor
 sudo service tor restart
 
-# Check SOCKS port
+# Verify SOCKS port
 netstat -tuln | grep 9050
 
-# Test SOCKS connection
-curl -x socks5://127.0.0.1:9050 https://www.example.com
+# Test connection
+curl -x socks5://127.0.0.1:9050 https://check.torproject.org
 ```
 
----
-
-### **Timeout/Connection Refused**
-
-**Problem:** `ConnectionError: Failed to establish a connection`
-
-**Solution:**
-```bash
-# Increase timeout in code
-crawler = DarkCrawler(timeout=60)
-
-# Check if site is actually alive
-curl -x socks5://127.0.0.1:9050 http://example.onion
-
-# Verify Tor has enough circuits
-echo "SIGNAL NEWNYM" | nc localhost 9051
-```
-
----
-
-### **403 Forbidden / CAPTCHA**
-
-**Problem:** Sites returning 403 or CAPTCHA challenges
-
-**Solution:**
-- Increase delays between requests
-- Rotate Tor identity more frequently
-- Use `alive_checker.py` to identify responsive sites first
-- Consider implementing headless browser (Selenium) for JavaScript sites
+### Database Locked
 
 ```python
-crawler = DarkCrawler(delay=(5, 15))  # Longer delays
-```
+# Always close connections
+db.close()
 
----
-
-### **"No module named 'requests'"**
-
-**Problem:** Import errors
-
-**Solution:**
-```bash
-# Ensure venv is activated
-source venv/bin/activate
-
-# Reinstall dependencies
-pip install -r requirements.txt --force-reinstall
-```
-
----
-
-### **Database Locked**
-
-**Problem:** `sqlite3.OperationalError: database is locked`
-
-**Solution:**
-```python
-db.close()  # Always close connections
 # Or use context manager
 with Database() as db:
     db.get_stats()
 ```
 
----
+### Timeout/Connection Errors
 
-## 🤝 Contributing
+```python
+# Increase timeout
+crawler = DarkCrawler(timeout=60, delay=(5, 15))
 
-Contributions welcome! Please follow these guidelines:
+# Verify site is alive first
+checker = AliveChecker(timeout=30)
+result = checker.check('http://example.onion')
+```
 
-1. **Fork** the repository
-2. **Create** a feature branch: `git checkout -b feature/new-capability`
-3. **Code** with style (PEP 8 compliance)
-4. **Test** functionality before submitting
-5. **Commit** with clear messages: `git commit -m "Add feature: X"`
-6. **Push** to branch: `git push origin feature/new-capability`
-7. **Open PR** with detailed description
+### Import Errors
 
-### Development Roadmap
-
-- [ ] Async/concurrent crawling (asyncio)
-- [ ] Headless browser support (Selenium/Playwright) for JS-heavy sites
-- [ ] Machine learning clustering (threat actor profiling)
-- [ ] REST API for remote access
-- [ ] Graph database integration (Neo4j)
-- [ ] Clearnet correlation engine
-- [ ] Export to various formats (CSV, Parquet, SQLite)
+```bash
+source venv/bin/activate
+pip install -r requirements.txt --force-reinstall
+```
 
 ---
 
-## ⚖️ Legal & Ethics
+## ⚖️ Legal Notice
 
-**IMPORTANT**: This tool must only be used:
+**This tool must ONLY be used for:**
+✅ Authorized law enforcement operations
+✅ Government agency authorized research
+✅ Authorized corporate security research
+✅ Penetration testing with written permission
+✅ Academic research with IRB approval
 
-✅ **With explicit authorization** from site/network owners
-✅ **For authorized security research** and defensive purposes
-✅ **In compliance with** all applicable laws (CFAA, GDPR, local regulations)
-✅ **By security professionals** with proper training
+**This tool must NOT be used for:**
+❌ Unauthorized network access
+❌ Data theft or privacy violations
+❌ Harassment or targeting of individuals
+❌ Illegal intelligence gathering
+❌ Violating CFAA or international law
 
-❌ **NOT for** unauthorized network access, data theft, or illegal intelligence gathering
-❌ **NOT to** violate user privacy or circumvent security controls
-❌ **NOT without** proper legal review and authorization
-
-**Disclaimer**: Users are solely responsible for ensuring compliance with law. The developers assume no liability for misuse.
-
----
-
-## 📜 License
-
-This project is provided as-is for authorized security research only. See LICENSE file for details.
+**Disclaimer**: Users are solely responsible for compliance. Developers assume no liability for misuse.
 
 ---
 
-## 📞 Support
+## 📚 Resources
 
-- **Issues**: Open GitHub Issues for bugs
-- **Discussions**: Use GitHub Discussions for questions
-- **Security**: Report vulnerabilities responsibly to [maintainer]
-
----
-
-## 🔗 Resources
-
-- [Tor Documentation](https://www.torproject.org/docs/)
-- [OSINT Guide](https://osintframework.com/)
+- [Tor Documentation](https://www.torproject.org/)
+- [OSINT Framework](https://osintframework.com/)
+- [BeautifulSoup4](https://www.crummy.com/software/BeautifulSoup/)
+- [SQLite3 Docs](https://www.sqlite.org/docs.html)
 - [Python Requests](https://docs.python-requests.org/)
-- [BeautifulSoup4](https://www.crummy.com/software/BeautifulSoup/bs4/doc/)
-- [SQLite3](https://www.sqlite.org/docs.html)
 
 ---
 
-**Last Updated:** August 2024  
-**Maintainer:** [@raaj7z](https://github.com/raaj7z)
+**Version:** 3.0  
+**Last Updated:** September 2026  
+**Maintainer:** [@raaj7z](https://github.com/raaj7z)  
+**License:** Authorized Use Only
