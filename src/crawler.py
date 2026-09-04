@@ -4,10 +4,13 @@ import time
 import random
 import re
 import json
+import socket
+import ssl
+import threading
 from intel_extractor import IntelExtractor
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from bs4 import BeautifulSoup
-from datetime import datetime
+from datetime import datetime, timedelta
 from utils import get_tor_session, success, error, info, warn, setup_logger
 from database import Database
 from captcha_handler import CaptchaHandler
@@ -429,6 +432,472 @@ class DarkCrawler:
         success(f"{'='*50}")
         
         return all_results
+    
+    def grab_service_banner(self, host, port, timeout=5):
+        """
+        Grab service banners from open ports
+        Default banners reveal real server software — key for origin matching
+        """
+        banner_data = {
+            'host': host,
+            'port': port,
+            'banner': '',
+            'service': '',
+            'version': '',
+            'vulnerabilities': []
+        }
+        
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(timeout)
+            sock.connect((host, port))
+            
+            # Send basic probe
+            probes = {
+                80:   b'HEAD / HTTP/1.0\r\n\r\n',
+                443:  b'HEAD / HTTP/1.0\r\n\r\n',
+                21:   b'',  # FTP sends banner automatically
+                22:   b'',  # SSH sends banner automatically
+                25:   b'',  # SMTP sends banner automatically
+                3306: b'',  # MySQL sends banner automatically
+            }
+            
+            probe = probes.get(port, b'')
+            if probe:
+                sock.send(probe)
+            
+            # Receive banner
+            banner = sock.recv(1024).decode('utf-8', errors='ignore').strip()
+            sock.close()
+            
+            banner_data['banner'] = banner
+            
+            # Parse service from banner
+            if 'SSH' in banner:
+                banner_data['service'] = 'SSH'
+                ver = re.search(r'SSH-[\d\.]+-(.+)', banner)
+                if ver:
+                    banner_data['version'] = ver.group(1)
+                    
+            elif 'HTTP' in banner or 'Server:' in banner:
+                banner_data['service'] = 'HTTP'
+                server = re.search(r'Server:\s*(.+)', banner)
+                if server:
+                    banner_data['version'] = server.group(1).strip()
+                    
+            elif '220' in banner and 'FTP' in banner.upper():
+                banner_data['service'] = 'FTP'
+                
+            elif '220' in banner and ('SMTP' in banner.upper() or 'mail' in banner.lower()):
+                banner_data['service'] = 'SMTP'
+                
+            elif '5.5' in banner or '8.0' in banner or 'mysql' in banner.lower():
+                banner_data['service'] = 'MySQL'
+            
+            # Check for default/unchanged banners — misconfiguration indicator
+            default_banners = [
+                'Apache/2.4.41',
+                'nginx/1.18.0',
+                'OpenSSH_7.9',
+                'ProFTPD',
+                'Postfix ESMTP',
+            ]
+            
+            for default in default_banners:
+                if default.lower() in banner.lower():
+                    banner_data['vulnerabilities'].append(
+                        f'Default banner exposed: {default}'
+                    )
+            
+            success(f"Banner [{port}]: {banner[:60]}")
+            
+        except Exception as e:
+            banner_data['error'] = str(e)
+        
+        return banner_data
+    
+    def check_tor_descriptor(self, onion_address):
+        """
+        Check Tor hidden service descriptor for inconsistencies
+        Descriptor mismatches can reveal real server information
+        """
+        descriptor = {
+            'onion_address': onion_address,
+            'reachable': False,
+            'inconsistencies': [],
+            'metadata': {}
+        }
+        
+        try:
+            # Extract just the onion hostname
+            if '/' in onion_address:
+                hostname = onion_address.split('/')[2]
+            else:
+                hostname = onion_address
+            
+            # Try to fetch the site
+            response, _ = self.fetch(onion_address)
+            if not response:
+                descriptor['inconsistencies'].append('Site unreachable')
+                return descriptor
+            
+            html = self.get_html(response)
+            headers = {}
+            if not isinstance(response, dict):
+                headers = dict(response.headers)
+            
+            descriptor['reachable'] = True
+            
+            # Check for inconsistencies
+            
+            # 1. Server header mismatch
+            server = headers.get('Server', '')
+            if server:
+                descriptor['metadata']['server'] = server
+                
+            # 2. Date header timezone mismatch
+            date_header = headers.get('Date', '')
+            if date_header:
+                descriptor['metadata']['server_date'] = date_header
+                # If server date differs significantly from expected — flag it
+                descriptor['inconsistencies'].append(
+                    f'Server date exposed: {date_header}'
+                )
+            
+            # 3. Clearnet references in HTML
+            clearnet_refs = re.findall(
+                r'https?://(?!.*\.onion)[a-zA-Z0-9\-\.]+\.[a-zA-Z]{2,}',
+                html
+            )
+            if clearnet_refs:
+                descriptor['inconsistencies'].append(
+                    f'Clearnet URLs found: {list(set(clearnet_refs))[:5]}'
+                )
+                descriptor['metadata']['clearnet_refs'] = list(set(clearnet_refs))
+            
+            # 4. IP addresses exposed in HTML
+            ip_pattern = r'\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\b'
+            exposed_ips = re.findall(ip_pattern, html)
+            # Filter out localhost and private ranges
+            public_ips = [ip for ip in exposed_ips 
+                         if not ip.startswith(('127.', '192.168.', '10.', '172.'))]
+            if public_ips:
+                descriptor['inconsistencies'].append(
+                    f'Public IPs exposed: {list(set(public_ips))}'
+                )
+                descriptor['metadata']['exposed_ips'] = list(set(public_ips))
+            
+            # 5. Email addresses that could reveal operator
+            emails = re.findall(
+                r'[a-zA-Z0-9._%+-]+@(?!.*\.onion)[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}',
+                html
+            )
+            if emails:
+                descriptor['inconsistencies'].append(
+                    f'Clearnet emails found: {list(set(emails))}'
+                )
+                descriptor['metadata']['clearnet_emails'] = list(set(emails))
+            
+            if descriptor['inconsistencies']:
+                warn(f"Descriptor inconsistencies: {len(descriptor['inconsistencies'])}")
+                for inc in descriptor['inconsistencies']:
+                    warn(f"  → {inc}")
+            
+        except Exception as e:
+            descriptor['error'] = str(e)
+        
+        return descriptor
+    
+    def match_ssl_to_clearnet(self, onion_url):
+        """
+        Check SSL certificate SANs to find clearnet domain
+        This is the most powerful origin server identification technique
+        SSL cert SANs often contain the real domain name
+        """
+        result = {
+            'onion_url': onion_url,
+            'clearnet_domains': [],
+            'origin_server_hints': [],
+            'confidence': 'LOW'
+        }
+        
+        try:
+            # Extract hostname
+            hostname = onion_url.replace('https://', '').replace('http://', '').split('/')[0]
+            
+            # Try HTTPS
+            if not onion_url.startswith('https://'):
+                return result
+            
+            context = ssl.create_default_context()
+            context.check_hostname = False
+            context.verify_mode = ssl.CERT_NONE
+            
+            # Route through Tor
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as raw_sock:
+                # Connect through SOCKS5 Tor proxy
+                raw_sock.connect(('127.0.0.1', 9050))
+                
+                with context.wrap_socket(
+                    raw_sock, server_hostname=hostname
+                ) as ssl_sock:
+                    cert = ssl_sock.getpeercert(binary_form=False)
+                    
+                    # Extract Subject Alternative Names
+                    san = cert.get('subjectAltName', [])
+                    for san_type, san_value in san:
+                        if san_type == 'DNS':
+                            if '.onion' not in san_value:
+                                # Clearnet domain in SSL cert!
+                                result['clearnet_domains'].append(san_value)
+                                result['origin_server_hints'].append(
+                                    f'SSL SAN clearnet domain: {san_value}'
+                                )
+                    
+                    # Check Subject CN
+                    subject = dict(x[0] for x in cert.get('subject', []))
+                    cn = subject.get('commonName', '')
+                    if cn and '.onion' not in cn:
+                        result['clearnet_domains'].append(cn)
+                        result['origin_server_hints'].append(
+                            f'SSL CN clearnet: {cn}'
+                        )
+                    
+                    # Check Issuer for CA info
+                    issuer = dict(x[0] for x in cert.get('issuer', []))
+                    result['certificate_issuer'] = issuer
+                    
+                    if result['clearnet_domains']:
+                        result['confidence'] = 'HIGH'
+                        success(f"CLEARNET DOMAINS FOUND: {result['clearnet_domains']}")
+                        
+        except Exception as e:
+            result['error'] = str(e)
+        
+        return result
+    
+    def extract_trust_links(self, html, url):
+        """
+        Extract trust relationships between actors
+        Marketplaces have vendor ratings, trust scores, vouches
+        This builds the relationship graph NTRO wants
+        """
+        trust_data = {
+            'vendor_profiles': [],
+            'trust_scores': [],
+            'vouches': [],
+            'pgp_signatures': [],
+            'wallet_links': [],
+            'relationship_edges': []  # For graph building
+        }
+        
+        soup = BeautifulSoup(html, 'html.parser')
+        text = soup.get_text()
+        
+        # Extract vendor ratings/trust scores
+        rating_patterns = [
+            r'(?:rating|trust|score|reputation)[\s:]+(\d+(?:\.\d+)?)\s*(?:/\s*\d+)?',
+            r'(\d+(?:\.\d+)?)\s*(?:stars?|/5|/10)\s*(?:rating|trust)',
+            r'trusted\s+(?:vendor|seller|member)',
+            r'(\d+)\s+(?:successful|completed)\s+(?:transactions|orders|deals)',
+        ]
+        
+        for pattern in rating_patterns:
+            matches = re.findall(pattern, text, re.IGNORECASE)
+            if matches:
+                trust_data['trust_scores'].extend(matches)
+        
+        # Extract PGP signatures — links actors across platforms
+        pgp_sig_pattern = r'-----BEGIN PGP SIGNATURE-----.*?-----END PGP SIGNATURE-----'
+        sigs = re.findall(pgp_sig_pattern, html, re.DOTALL)
+        trust_data['pgp_signatures'] = sigs
+        
+        # Extract vouches/references between actors
+        vouch_patterns = [
+            r'(?:vouched?|verified|trusted)\s+by\s+([A-Za-z0-9_\-]{3,25})',
+            r'([A-Za-z0-9_\-]{3,25})\s+(?:vouches?|verifies?|trusts?)\s+(?:for\s+)?([A-Za-z0-9_\-]{3,25})',
+            r'ref(?:erred|erence)?\s+by\s+([A-Za-z0-9_\-]{3,25})',
+        ]
+        
+        for pattern in vouch_patterns:
+            matches = re.findall(pattern, text, re.IGNORECASE)
+            if matches:
+                for match in matches:
+                    if isinstance(match, tuple):
+                        trust_data['relationship_edges'].append({
+                            'from': match[0],
+                            'to': match[1] if len(match) > 1 else 'unknown',
+                            'type': 'vouch',
+                            'source': url
+                        })
+                    else:
+                        trust_data['vouches'].append(match)
+        
+        # Extract wallet trust links — same wallet = same actor
+        bitcoin_pattern = r'\b[13][a-km-zA-HJ-NP-Z1-9]{25,34}\b'
+        wallets = re.findall(bitcoin_pattern, text)
+        
+        for wallet in set(wallets):
+            trust_data['wallet_links'].append({
+                'address': wallet,
+                'type': 'bitcoin',
+                'source_url': url,
+                'context': self._get_context(text, wallet, 100)
+            })
+        
+        # Extract vendor profiles
+        vendor_selectors = [
+            {'class_': re.compile(r'vendor|seller|merchant|trader', re.I)},
+            {'class_': re.compile(r'profile|user-info|member', re.I)},
+        ]
+        
+        for selector in vendor_selectors:
+            elements = soup.find_all(attrs=selector)
+            for el in elements[:10]:
+                vendor_text = el.get_text(separator=' ', strip=True)
+                if vendor_text and len(vendor_text) > 10:
+                    trust_data['vendor_profiles'].append({
+                        'text': vendor_text[:500],
+                        'source': url
+                    })
+            if trust_data['vendor_profiles']:
+                break
+        
+        if any([trust_data['trust_scores'], trust_data['vouches'],
+                trust_data['relationship_edges'], trust_data['wallet_links']]):
+            info(f"  Trust links found:")
+            info(f"    Scores: {len(trust_data['trust_scores'])}")
+            info(f"    Relationships: {len(trust_data['relationship_edges'])}")
+            info(f"    Wallets: {len(trust_data['wallet_links'])}")
+        
+        return trust_data
+    
+    def _get_context(self, text, keyword, window=150):
+        """Get surrounding context for a keyword"""
+        idx = text.find(keyword)
+        if idx == -1:
+            return ''
+        start = max(0, idx - window)
+        end = min(len(text), idx + len(keyword) + window)
+        return text[start:end].strip()
+    
+    def autonomous_crawl(self, seed_urls, target_username=None,
+                         duration_hours=1, interval_minutes=30):
+        """
+        Autonomous continuous crawling mode
+        Runs without manual input — required by NTRO problem statement
+        Monitors for new content and changes over time
+        """
+        end_time = datetime.now() + timedelta(hours=duration_hours)
+        crawl_count = 0
+        
+        info(f"Autonomous mode started")
+        info(f"Duration: {duration_hours} hours")
+        info(f"Interval: {interval_minutes} minutes")
+        info(f"Seeds: {len(seed_urls)} URLs")
+        info(f"Will stop at: {end_time.strftime('%H:%M:%S')}")
+        
+        all_discovered_urls = set(seed_urls)
+        
+        while datetime.now() < end_time:
+            crawl_count += 1
+            info(f"\n=== Autonomous Crawl #{crawl_count} ===")
+            info(f"Time remaining: {end_time - datetime.now()}")
+            info(f"URLs in queue: {len(all_discovered_urls)}")
+            
+            # Crawl current batch
+            current_urls = list(all_discovered_urls)
+            results = self.crawl_concurrent(
+                current_urls[:10],  # Max 10 per cycle
+                target_username=target_username
+            )
+            
+            # Discover new URLs from results
+            new_urls = set()
+            for result in results:
+                links = result.get('links', {})
+                onion_links = links.get('onion', [])
+                for link in onion_links:
+                    if link not in all_discovered_urls:
+                        new_urls.add(link)
+                        info(f"  New URL discovered: {link[:50]}")
+            
+            # Add new URLs to queue
+            all_discovered_urls.update(new_urls)
+            
+            info(f"Cycle complete — {len(new_urls)} new URLs discovered")
+            
+            # Wait before next cycle
+            if datetime.now() < end_time:
+                wait_seconds = interval_minutes * 60
+                info(f"Waiting {interval_minutes} minutes before next cycle...")
+                time.sleep(wait_seconds)
+        
+        success(f"Autonomous crawl complete!")
+        success(f"Total cycles: {crawl_count}")
+        success(f"Total URLs discovered: {len(all_discovered_urls)}")
+        
+        return {
+            'cycles': crawl_count,
+            'total_urls': len(all_discovered_urls),
+            'all_urls': list(all_discovered_urls)
+        }
+    
+    def crawl_with_timeline(self, url, target_username=None):
+        """
+        Crawl with full timeline metadata
+        Enables timeline queries required by problem statement
+        """
+        crawl_time = datetime.utcnow()
+        
+        # Regular crawl
+        result = self.crawl_single(url, target_username)
+        
+        # Add timeline metadata
+        result['timeline'] = {
+            'crawled_at': crawl_time.isoformat(),
+            'crawled_at_unix': crawl_time.timestamp(),
+            'date': crawl_time.strftime('%Y-%m-%d'),
+            'hour': crawl_time.hour,
+            'day_of_week': crawl_time.strftime('%A'),
+            'week_number': crawl_time.isocalendar()[1],
+        }
+        
+        # Check for banners on common ports
+        try:
+            hostname = url.replace('http://', '').replace('https://', '').split('/')[0]
+            result['service_banners'] = {}
+            
+            for port in [80, 443, 22, 21]:
+                banner = self.grab_service_banner(hostname, port, timeout=3)
+                if banner.get('banner'):
+                    result['service_banners'][port] = banner
+        except:
+            result['service_banners'] = {}
+        
+        # Check descriptor inconsistencies
+        result['descriptor'] = self.check_tor_descriptor(url)
+        
+        # Check SSL for clearnet domain matching
+        if url.startswith('https://'):
+            result['ssl_clearnet'] = self.match_ssl_to_clearnet(url)
+        
+        # Extract trust links
+        html = self.get_html(
+            self.fetch(url)[0]
+        ) if result.get('success') else ''
+        
+        if html:
+            result['trust_links'] = self.extract_trust_links(html, url)
+        
+        # Save to DB with timeline
+        self.db.save_timeline_crawl(
+            self.session_id, url, result['timeline'],
+            result.get('descriptor', {}),
+            result.get('trust_links', {})
+        )
+        
+        return result
     
     def close(self):
         if self.js_renderer:
