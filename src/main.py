@@ -106,8 +106,11 @@ def main_menu(db):
     print("3. View database stats")
     print("4. Search past data by username")
     print("5. Exit")
+    print("6. Autonomous crawl mode")
+    print("7. Query timeline")
+    print("8. View actor relationships")
     
-    return input("\nChoice [1-5]: ").strip()
+    return input("\nChoice [1-8]: ").strip()
 
 def search_past_data(db):
     """Search existing database for a username"""
@@ -283,6 +286,42 @@ def main():
             db.close()
             success("Goodbye!")
             break
+        
+        elif choice == '6':
+            urls = get_urls_from_user()
+            try:
+                hours = float(input("Duration in hours [default 1]: ").strip() or '1')
+                interval = int(input("Interval in minutes [default 30]: ").strip() or '30')
+            except:
+                hours, interval = 1, 30
+            
+            target = input("Target username (or Enter to skip): ").strip() or None
+            session_id = db.create_session(target, urls)
+            
+            crawler = DarkCrawler(
+                db=db, session_id=session_id,
+                max_workers=3
+            )
+            crawler.autonomous_crawl(urls, target, hours, interval)
+        
+        elif choice == '7':
+            start = input("Start date (YYYY-MM-DD): ").strip()
+            end = input("End date (YYYY-MM-DD): ").strip()
+            results = db.query_timeline(start, end)
+            print(f"\nFound {len(results)} crawls between {start} and {end}")
+            for r in results[:10]:
+                print(f"  {r['crawled_at']} — {r['url'][:50]}")
+                print(f"    Descriptor issues: {r['descriptor_issues']}")
+                print(f"    Trust links: {r['trust_links_found']}")
+        
+        elif choice == '8':
+            username = input("Actor username (or Enter for all): ").strip() or None
+            relationships = db.get_actor_relationships(username)
+            print(f"\nFound {len(relationships)} relationships")
+            for r in relationships[:20]:
+                print(f"  {r['from_actor']} → {r['to_actor']} [{r['link_type']}]")
+                if r['wallet_address']:
+                    print(f"    Wallet: {r['wallet_address']}")
         
         else:
             warn("Invalid choice")
