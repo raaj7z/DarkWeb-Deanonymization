@@ -238,6 +238,70 @@ class Database:
                 analyzed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
+
+        # Service banners table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS service_banners (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT,
+                host TEXT,
+                port INTEGER,
+                banner TEXT,
+                service TEXT,
+                version TEXT,
+                vulnerabilities TEXT,
+                found_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
+        # Descriptor checks table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS descriptor_checks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT,
+                onion_address TEXT,
+                reachable BOOLEAN,
+                inconsistencies TEXT,
+                clearnet_refs TEXT,
+                exposed_ips TEXT,
+                metadata TEXT,
+                checked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
+        # Trust links table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS trust_links (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT,
+                source_url TEXT,
+                from_actor TEXT,
+                to_actor TEXT,
+                link_type TEXT,
+                wallet_address TEXT,
+                pgp_signature TEXT,
+                trust_score TEXT,
+                found_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
+        # Timeline crawls table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS timeline_crawls (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT,
+                url TEXT,
+                crawled_at TEXT,
+                crawled_at_unix REAL,
+                date TEXT,
+                hour INTEGER,
+                day_of_week TEXT,
+                week_number INTEGER,
+                descriptor_issues INTEGER,
+                trust_links_found INTEGER,
+                new_content BOOLEAN DEFAULT FALSE
+            )
+        ''')
         
         self.conn.commit()
         success("Database tables ready")
@@ -486,6 +550,94 @@ class Database:
             self.conn.commit()
         except Exception as e:
             error(f"save_timing_analysis: {e}")
+
+    def save_banner(self, session_id, banner_data):
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute('''
+                INSERT INTO service_banners
+                (session_id, host, port, banner, service, version, vulnerabilities)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                session_id,
+                banner_data.get('host', ''),
+                banner_data.get('port', 0),
+                banner_data.get('banner', '')[:500],
+                banner_data.get('service', ''),
+                banner_data.get('version', ''),
+                json.dumps(banner_data.get('vulnerabilities', []))
+            ))
+            self.conn.commit()
+        except Exception as e:
+            error(f"save_banner: {e}")
+
+    def save_descriptor(self, session_id, descriptor):
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute('''
+                INSERT INTO descriptor_checks
+                (session_id, onion_address, reachable, inconsistencies,
+                 clearnet_refs, exposed_ips, metadata)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                session_id,
+                descriptor.get('onion_address', ''),
+                descriptor.get('reachable', False),
+                json.dumps(descriptor.get('inconsistencies', [])),
+                json.dumps(descriptor.get('metadata', {}).get('clearnet_refs', [])),
+                json.dumps(descriptor.get('metadata', {}).get('exposed_ips', [])),
+                json.dumps(descriptor.get('metadata', {}))
+            ))
+            self.conn.commit()
+        except Exception as e:
+            error(f"save_descriptor: {e}")
+
+    def save_trust_links(self, session_id, url, trust_data):
+        try:
+            cursor = self.conn.cursor()
+            
+            # Save relationship edges
+            for edge in trust_data.get('relationship_edges', []):
+                cursor.execute('''
+                    INSERT INTO trust_links
+                    (session_id, source_url, from_actor, to_actor, link_type)
+                    VALUES (?, ?, ?, ?, ?)
+                ''', (session_id, url, edge['from'], edge['to'], edge['type']))
+            
+            # Save wallet links
+            for wallet in trust_data.get('wallet_links', []):
+                cursor.execute('''
+                    INSERT INTO trust_links
+                    (session_id, source_url, link_type, wallet_address)
+                    VALUES (?, ?, ?, ?)
+                ''', (session_id, url, 'wallet', wallet['address']))
+            
+            self.conn.commit()
+        except Exception as e:
+            error(f"save_trust_links: {e}")
+
+    def save_timeline_crawl(self, session_id, url, timeline, descriptor, trust_links):
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute('''
+                INSERT INTO timeline_crawls
+                (session_id, url, crawled_at, crawled_at_unix, date,
+                 hour, day_of_week, week_number, descriptor_issues, trust_links_found)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                session_id, url,
+                timeline['crawled_at'],
+                timeline['crawled_at_unix'],
+                timeline['date'],
+                timeline['hour'],
+                timeline['day_of_week'],
+                timeline['week_number'],
+                len(descriptor.get('inconsistencies', [])),
+                len(trust_links.get('relationship_edges', []))
+            ))
+            self.conn.commit()
+        except Exception as e:
+            error(f"save_timeline_crawl: {e}")
     
     # ── QUERIES ──
     def get_posts_by_username(self, username, session_id=None):
@@ -544,7 +696,35 @@ class Database:
             ORDER BY sc.checked_at DESC
         ''', (url,))
         return cursor.fetchall()
+
+    def query_timeline(self, start_date, end_date, url=None):
+        """Query crawls within a timeline — required by NTRO"""
+        cursor = self.conn.cursor()
+        if url:
+            cursor.execute('''
+                SELECT * FROM timeline_crawls
+                WHERE date BETWEEN ? AND ? AND url = ?
+                ORDER BY crawled_at ASC
+            ''', (start_date, end_date, url))
+        else:
+            cursor.execute('''
+                SELECT * FROM timeline_crawls
+                WHERE date BETWEEN ? AND ?
+                ORDER BY crawled_at ASC
+            ''', (start_date, end_date))
+        return cursor.fetchall()
+
+    def get_actor_relationships(self, username=None):
+        """Get trust relationship graph data"""
+        cursor = self.conn.cursor()
+        if username:
+            cursor.execute('''
+                SELECT * FROM trust_links
+                WHERE from_actor = ? OR to_actor = ?
+            ''', (username, username))
+        else:
+            cursor.execute('SELECT * FROM trust_links')
+        return cursor.fetchall()
     
     def close(self):
         self.conn.close()
-
