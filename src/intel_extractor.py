@@ -117,71 +117,60 @@ class IntelExtractor:
     
     # ── SSL/TLS ANALYSIS ──
     def get_ssl_info(self, hostname, port=443):
-        """
-        Extract SSL certificate information
-        Reveals: real server info, organization, expiry, alternative names
-        """
+        """Extract certificate information through the Tor SOCKS proxy."""
         result = {
-            'hostname': hostname,
-            'port': port,
-            'ssl_available': False,
-            'certificate': {},
-            'vulnerabilities': [],
-            'server_info': {}
+            'hostname': hostname, 'port': port, 'ssl_available': False,
+            'certificate': {}, 'vulnerabilities': [], 'server_info': {}
         }
-        
         try:
+            import socks, ssl
+            from cryptography import x509
+            from cryptography.hazmat.backends import default_backend
+            from cryptography.hazmat.primitives import hashes
+
+            sock = socks.socksocket()
+            sock.set_proxy(socks.SOCKS5, '127.0.0.1', 9050, rdns=True)
+            sock.settimeout(10)
+            sock.connect((hostname, port))
+
             context = ssl.create_default_context()
             context.check_hostname = False
             context.verify_mode = ssl.CERT_NONE
-            
-            with socket.create_connection((hostname, port), timeout=10) as sock:
-                with context.wrap_socket(sock, server_hostname=hostname) as ssock:
-                    cert = ssock.getpeercert()
-                    cipher = ssock.cipher()
-                    version = ssock.version()
-                    
-                    result['ssl_available'] = True
-                    result['certificate'] = {
-                        'subject': dict(x[0] for x in cert.get('subject', [])),
-                        'issuer': dict(x[0] for x in cert.get('issuer', [])),
-                        'valid_from': cert.get('notBefore', ''),
-                        'valid_until': cert.get('notAfter', ''),
-                        'serial_number': cert.get('serialNumber', ''),
-                        'san': [x[1] for x in cert.get('subjectAltName', [])],
-                        'version': cert.get('version', ''),
-                    }
-                    result['server_info'] = {
-                        'cipher': cipher[0] if cipher else '',
-                        'protocol': version,
-                        'bits': cipher[2] if cipher else 0,
-                    }
-                    
-                    # Check for vulnerabilities
-                    if version in ['TLSv1', 'TLSv1.1', 'SSLv3', 'SSLv2']:
-                        result['vulnerabilities'].append(
-                            f'Outdated protocol: {version}'
-                        )
-                    
-                    # Check for weak ciphers
-                    if cipher and cipher[2] and cipher[2] < 128:
-                        result['vulnerabilities'].append(
-                            f'Weak cipher: {cipher[0]} ({cipher[2]} bits)'
-                        )
-                    
-                    # Check SAN for additional domains — intelligence gold
-                    if result['certificate']['san']:
-                        info(f"  SSL SANs found: {result['certificate']['san']}")
-                    
-                    success(f"SSL analyzed: {hostname}")
-                    
-        except ssl.SSLError as e:
-            result['vulnerabilities'].append(f'SSL Error: {str(e)}')
+            with context.wrap_socket(sock, server_hostname=hostname) as ssock:
+                raw_cert = ssock.getpeercert(binary_form=True)
+                cipher = ssock.cipher()
+                version = ssock.version()
+
+            cert = x509.load_der_x509_certificate(raw_cert, default_backend())
+            try:
+                san = cert.extensions.get_extension_for_class(x509.SubjectAlternativeName).value
+                sans = [n.value for n in san if isinstance(n, x509.DNSName)]
+            except x509.ExtensionNotFound:
+                sans = []
+
+            result['ssl_available'] = True
+            result['certificate'] = {
+                'subject': cert.subject.rfc4514_string(),
+                'issuer': cert.issuer.rfc4514_string(),
+                'valid_from': cert.not_valid_before_utc.isoformat(),
+                'valid_until': cert.not_valid_after_utc.isoformat(),
+                'serial_number': format(cert.serial_number, 'X'),
+                'san': sans,
+                'fingerprint_sha256': cert.fingerprint(hashes.SHA256()).hex(),
+            }
+            result['server_info'] = {
+                'cipher': cipher[0] if cipher else '',
+                'protocol': version or '',
+                'bits': cipher[2] if cipher else 0,
+            }
+            if version in ('TLSv1', 'TLSv1.1', 'SSLv3', 'SSLv2'):
+                result['vulnerabilities'].append(f'Outdated protocol: {version}')
+            if cipher and cipher[2] and cipher[2] < 128:
+                result['vulnerabilities'].append(f'Weak cipher: {cipher[0]} ({cipher[2]} bits)')
         except Exception as e:
             result['error'] = str(e)
-        
         return result
-    
+
     # ── MISCONFIGURATION DETECTION ──
     def detect_misconfigs(self, html, url, headers=None):
         """Detect server misconfigurations — exposes real server info"""
