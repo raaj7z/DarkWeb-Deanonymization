@@ -10,6 +10,7 @@ from utils import get_tor_session, get_real_ip, get_tor_ip
 from alive_checker import AliveChecker
 from crawler import DarkCrawler
 from database import Database
+from report_generator import ReportGenerator
 
 def verify_anonymity():
     session = get_tor_session()
@@ -160,9 +161,8 @@ def run_crawl_session(db, session):
     except:
         workers = 3
     
-    # Ask about JS rendering
-    use_js_input = input("Enable JS rendering for dynamic pages? [y/N]: ").strip().lower()
-    use_js = use_js_input == 'y'
+    # JS rendering removed; collection uses Tor-routed HTTP/HTML only.
+    use_js = False
     
     # Ask about circuit rotation
     rotate_input = input("Enable Tor circuit rotation? [Y/n]: ").strip().lower()
@@ -191,7 +191,7 @@ def run_crawl_session(db, session):
         delay=(1, 3),
         timeout=30,
         max_workers=workers,
-        use_js=use_js,
+        use_js=False,
         rotate_circuits=rotate,
         rotate_every=rotate_every
     )
@@ -209,7 +209,7 @@ def run_crawl_session(db, session):
     
     # Step 2: Crawl concurrently
     info(f"\n=== STEP 2: Crawling ({workers} workers) ===")
-    results = crawler.crawl_concurrent(alive_urls, target_username=target, use_js=use_js)
+    results = crawler.crawl_concurrent(alive_urls, target_username=target, use_js=False)
     
     # Step 3: Summary
     total_usernames = sum(len(r.get('usernames', [])) for r in results)
@@ -231,23 +231,13 @@ def run_crawl_session(db, session):
     success(f"Posts extracted : {total_posts}")
     success(f"Emails found    : {total_emails}")
     
-    # Step 5: Save report
+    # Step 5: Save the complete database-backed report.
+    # The old session JSON intentionally contained only a small summary and
+    # therefore discarded most crawler output. ReportGenerator now exports
+    # every stored row without arbitrary LIMIT/truncation.
     os.makedirs('reports', exist_ok=True)
-    report_file = f"reports/session_{session_id}.json"
-    
-    with open(report_file, 'w') as f:
-        serializable = [{
-            'url': r['url'],
-            'title': r.get('title', ''),
-            'usernames': r.get('usernames', []),
-            'emails': r.get('emails', []),
-            'posts_count': len(r.get('posts', [])),
-            'timestamps': r.get('timestamps', []),
-            'success': r.get('success', False)
-        } for r in results]
-        json.dump(serializable, f, indent=2)
-    
-    success(f"Report saved: {report_file}")
+    report_file = ReportGenerator(db).save_json(session_id)
+    success(f"Complete report saved: {report_file}")
 
 def main():
     print_banner()
