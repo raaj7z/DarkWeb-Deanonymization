@@ -3,22 +3,39 @@
 import sqlite3
 import json
 import os
+import threading
 from datetime import datetime
 from utils import success, error, info
+
+
+def _db_write(method):
+    """Serialize SQLite writes when crawler workers share one connection."""
+    def wrapped(self, *args, **kwargs):
+        with self._lock:
+            return method(self, *args, **kwargs)
+    wrapped.__name__ = method.__name__
+    wrapped.__doc__ = method.__doc__
+    return wrapped
+
 
 class Database:
     
     def __init__(self, db_path='data/crawler.db'):
-        os.makedirs('data', exist_ok=True)
         self.db_path = db_path
+        parent = os.path.dirname(os.path.abspath(db_path))
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+        self._lock = threading.RLock()
         
         # FIXED: check_same_thread=False for concurrent use
-        self.conn = sqlite3.connect(db_path, check_same_thread=False)
+        self.conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
         self.conn.row_factory = sqlite3.Row
         
         # FIXED: WAL mode — faster writes, no locking issues
         self.conn.execute('PRAGMA journal_mode=WAL')
+        self.conn.execute('PRAGMA busy_timeout=30000')
         self.conn.execute('PRAGMA synchronous=NORMAL')
+        self.conn.execute('PRAGMA foreign_keys=ON')
         self.conn.execute('PRAGMA cache_size=10000')
         
         self._create_tables()
@@ -303,10 +320,27 @@ class Database:
             )
         ''')
         
+        # Indexes make complete-history exports and session queries predictable.
+        for statement in (
+            'CREATE INDEX IF NOT EXISTS idx_site_checks_session ON site_checks(session_id)',
+            'CREATE INDEX IF NOT EXISTS idx_pages_session ON pages(session_id)',
+            'CREATE INDEX IF NOT EXISTS idx_usernames_session ON usernames(session_id)',
+            'CREATE INDEX IF NOT EXISTS idx_posts_session ON posts(session_id)',
+            'CREATE INDEX IF NOT EXISTS idx_links_session ON links(session_id)',
+            'CREATE INDEX IF NOT EXISTS idx_crypto_session ON crypto_addresses(session_id)',
+            'CREATE INDEX IF NOT EXISTS idx_misconfigs_session ON misconfigs(session_id)',
+            'CREATE INDEX IF NOT EXISTS idx_profiles_session ON profiles(session_id)',
+            'CREATE INDEX IF NOT EXISTS idx_timed_posts_session ON timed_posts(session_id)',
+            'CREATE INDEX IF NOT EXISTS idx_trust_links_session ON trust_links(session_id)',
+            'CREATE INDEX IF NOT EXISTS idx_timeline_session ON timeline_crawls(session_id)',
+        ):
+            self.conn.execute(statement)
+
         self.conn.commit()
         success("Database tables ready")
     
     # ── SESSION MANAGEMENT ──
+    @_db_write
     def create_session(self, target_username, urls):
         import uuid
         session_id = str(uuid.uuid4())[:8]
@@ -319,6 +353,7 @@ class Database:
         info(f"Session created: {session_id}")
         return session_id
     
+    @_db_write
     def complete_session(self, session_id, summary):
         cursor = self.conn.cursor()
         cursor.execute('''
@@ -334,6 +369,7 @@ class Database:
         return cursor.fetchall()
     
     # ── SEARCH HISTORY ──
+    @_db_write
     def log_search(self, session_id, query_type, query_value, results_count=0):
         cursor = self.conn.cursor()
         cursor.execute('''
@@ -352,6 +388,7 @@ class Database:
         return cursor.fetchall()
     
     # ── SITES ──
+    @_db_write
     def save_site(self, url, title, status_code, alive, server='', session_id='', response_time=0):
         cursor = self.conn.cursor()
         
@@ -387,6 +424,7 @@ class Database:
         return site_id
     
     # ── PAGES ──
+    @_db_write
     def save_page(self, session_id, site_id, url, html, text):
         try:
             word_count = len(text.split())
@@ -394,12 +432,13 @@ class Database:
             cursor.execute('''
                 INSERT INTO pages (session_id, site_id, url, html, text_content, word_count)
                 VALUES (?, ?, ?, ?, ?, ?)
-            ''', (session_id, site_id, url, html[:50000], text[:10000], word_count))
+            ''', (session_id, site_id, url, html or '', text or '', word_count))
             self.conn.commit()
         except Exception as e:
             error(f"save_page: {e}")
     
     # ── USERNAMES ──
+    @_db_write
     def save_username(self, session_id, username, source_url, context='', pattern=''):
         try:
             cursor = self.conn.cursor()
@@ -412,6 +451,7 @@ class Database:
             error(f"save_username: {e}")
     
     # ── POSTS ──
+    @_db_write
     def save_post(self, session_id, username, content, timestamp, source_url):
         try:
             cursor = self.conn.cursor()
@@ -424,6 +464,7 @@ class Database:
             error(f"save_post: {e}")
     
     # ── LINKS ──
+    @_db_write
     def save_link(self, session_id, source_url, target_url, link_type='onion'):
         try:
             cursor = self.conn.cursor()
@@ -436,6 +477,7 @@ class Database:
             error(f"save_link: {e}")
 
     # ── SAVING EXTENDED DATA ──
+    @_db_write
     def save_crypto(self, session_id, currency, address, context, source_url):
         try:
             cursor = self.conn.cursor()
@@ -448,6 +490,7 @@ class Database:
         except Exception as e:
             error(f"save_crypto: {e}")
 
+    @_db_write
     def save_misconfig(self, session_id, url, misconfig_type, severity, detail):
         try:
             cursor = self.conn.cursor()
@@ -460,6 +503,7 @@ class Database:
         except Exception as e:
             error(f"save_misconfig: {e}")
 
+    @_db_write
     def save_fingerprint(self, session_id, url, fingerprint):
         try:
             cursor = self.conn.cursor()
@@ -481,6 +525,7 @@ class Database:
         except Exception as e:
             error(f"save_fingerprint: {e}")
 
+    @_db_write
     def save_profile(self, session_id, url, profile):
         try:
             cursor = self.conn.cursor()
@@ -500,6 +545,7 @@ class Database:
         except Exception as e:
             error(f"save_profile: {e}")
 
+    @_db_write
     def save_timed_post(self, session_id, url, post, timezone_estimate):
         try:
             cursor = self.conn.cursor()
@@ -519,7 +565,7 @@ class Database:
             ''', (
                 session_id, url,
                 post.get('username', 'unknown'),
-                post.get('text', '')[:3000],
+                post.get('text', ''),
                 post.get('word_count', 0),
                 json.dumps(post.get('timestamps', [])),
                 round(avg_hour),
@@ -531,6 +577,7 @@ class Database:
         except Exception as e:
             error(f"save_timed_post: {e}")
 
+    @_db_write
     def save_timing_analysis(self, session_id, username, analysis):
         try:
             cursor = self.conn.cursor()
@@ -551,6 +598,7 @@ class Database:
         except Exception as e:
             error(f"save_timing_analysis: {e}")
 
+    @_db_write
     def save_banner(self, session_id, banner_data):
         try:
             cursor = self.conn.cursor()
@@ -562,7 +610,7 @@ class Database:
                 session_id,
                 banner_data.get('host', ''),
                 banner_data.get('port', 0),
-                banner_data.get('banner', '')[:500],
+                banner_data.get('banner', ''),
                 banner_data.get('service', ''),
                 banner_data.get('version', ''),
                 json.dumps(banner_data.get('vulnerabilities', []))
@@ -571,6 +619,7 @@ class Database:
         except Exception as e:
             error(f"save_banner: {e}")
 
+    @_db_write
     def save_descriptor(self, session_id, descriptor):
         try:
             cursor = self.conn.cursor()
@@ -592,6 +641,7 @@ class Database:
         except Exception as e:
             error(f"save_descriptor: {e}")
 
+    @_db_write
     def save_trust_links(self, session_id, url, trust_data):
         try:
             cursor = self.conn.cursor()
@@ -616,6 +666,7 @@ class Database:
         except Exception as e:
             error(f"save_trust_links: {e}")
 
+    @_db_write
     def save_timeline_crawl(self, session_id, url, timeline, descriptor, trust_links):
         try:
             cursor = self.conn.cursor()
@@ -726,5 +777,28 @@ class Database:
             cursor.execute('SELECT * FROM trust_links')
         return cursor.fetchall()
     
+    def list_tables(self):
+        """Return application tables in deterministic order."""
+        rows = self.conn.execute("""
+            SELECT name FROM sqlite_master
+            WHERE type='table' AND name NOT LIKE 'sqlite_%'
+            ORDER BY name
+        """).fetchall()
+        return [row['name'] for row in rows]
+
+    def export_all_rows(self):
+        """Export every row from every application table without truncation."""
+        exported = {}
+        for table in self.list_tables():
+            rows = self.conn.execute(f'SELECT * FROM "{table}"').fetchall()
+            exported[table] = [dict(row) for row in rows]
+        return exported
+
+    def integrity_check(self):
+        """Run SQLite integrity/foreign-key checks and return a JSON-safe result."""
+        integrity = self.conn.execute('PRAGMA integrity_check').fetchone()[0]
+        foreign_keys = [dict(row) for row in self.conn.execute('PRAGMA foreign_key_check').fetchall()]
+        return {'integrity_check': integrity, 'foreign_key_errors': foreign_keys}
+
     def close(self):
         self.conn.close()
