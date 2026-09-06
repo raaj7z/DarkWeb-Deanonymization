@@ -4,6 +4,7 @@
 
 import json
 import os
+from html import escape
 from datetime import datetime
 from database import Database
 from utils import success, error, info, warn
@@ -36,7 +37,7 @@ class ReportGenerator:
     def _get_sites(self, session_id):
         cursor = self.db.conn.cursor()
         cursor.execute('''
-            SELECT DISTINCT sc.url, s.title, s.alive, s.server,
+            SELECT sc.id AS check_id, sc.url, s.id AS site_id, s.title, s.alive, s.server,
                    s.status_code, sc.response_time_ms, sc.checked_at
             FROM site_checks sc
             LEFT JOIN sites s ON sc.url = s.url
@@ -65,7 +66,6 @@ class ReportGenerator:
             FROM posts
             WHERE session_id=?
             ORDER BY extracted_at DESC
-            LIMIT 100
         ''', (session_id,))
         return cursor.fetchall()
 
@@ -78,7 +78,6 @@ class ReportGenerator:
             FROM timed_posts
             WHERE session_id=?
             ORDER BY extracted_at DESC
-            LIMIT 50
         ''', (session_id,))
         return cursor.fetchall()
 
@@ -286,6 +285,11 @@ class ReportGenerator:
                 'found':  row['found_at'],
             })
 
+        # Export the complete database snapshot as well. This is intentionally
+        # untruncated so investigators can recover every stored observation.
+        all_rows = self.db.export_all_rows()
+        db_integrity = self.db.integrity_check()
+
         # Build complete report
         report = {
             # ── HEADER ──
@@ -330,7 +334,7 @@ class ReportGenerator:
                 'total': len(posts),
                 'details': [{
                     'username':   row['username'],
-                    'content':    row['content'][:500],
+                    'content':    row['content'],
                     'word_count': row['word_count'],
                     'timestamp':  row['timestamp_found'],
                     'source':     row['source_url'],
@@ -342,7 +346,7 @@ class ReportGenerator:
                 'total': len(timed_posts),
                 'details': [{
                     'username':          row['username'],
-                    'content':           row['content'][:300],
+                    'content':           row['content'],
                     'word_count':        row['word_count'],
                     'timestamps':        json.loads(row['timestamps'] or '[]'),
                     'hour_of_day':       row['hour_of_day'],
@@ -493,6 +497,10 @@ class ReportGenerator:
                 'time':    row['searched_at'],
             } for row in history],
 
+            # ── COMPLETE DATABASE SNAPSHOT ──
+            'database_snapshot': all_rows,
+            'database_integrity': db_integrity,
+
             # ── STATISTICS SUMMARY ──
             'statistics': {
                 'sites_crawled':         len(sites),
@@ -510,6 +518,8 @@ class ReportGenerator:
                 'same_person_matches':   sum(1 for r in comparisons if r['is_same_person']),
                 'clusters_found':        len(clusters),
                 'behavioral_profiles':   len(behavior),
+                'database_tables':       len(all_rows),
+                'database_rows_total':   sum(len(rows) for rows in all_rows.values()),
             }
         }
 
@@ -525,10 +535,23 @@ class ReportGenerator:
             return None
 
         filename = f"reports/report_{session_id}.json"
-        with open(filename, 'w') as f:
-            json.dump(report, f, indent=2, default=str)
+        tmp_filename = filename + ".tmp"
+        with open(tmp_filename, 'w', encoding='utf-8') as f:
+            json.dump(report, f, indent=2, ensure_ascii=False, default=str)
+            f.write("\n")
+        os.replace(tmp_filename, filename)
 
-        success(f"JSON report: {filename}")
+        # Keep the historical filename used by the CLI, but point it to the
+        # same complete report rather than the old lossy session summary.
+        compatibility = f"reports/session_{session_id}.json"
+        if os.path.abspath(compatibility) != os.path.abspath(filename):
+            with open(compatibility + '.tmp', 'w', encoding='utf-8') as f:
+                json.dump(report, f, indent=2, ensure_ascii=False, default=str)
+                f.write("\n")
+            os.replace(compatibility + '.tmp', compatibility)
+
+        success(f"JSON report (complete): {filename}")
+        success(f"JSON compatibility copy: {compatibility}")
         return filename
 
     def save_pdf(self, session_id):
@@ -842,6 +865,42 @@ class ReportGenerator:
 
         stats = report['statistics']
 
+        def _render_crypto():
+            blocks = []
+            for curr, addrs in report['crypto_addresses']['by_currency'].items():
+                rows = []
+                for a in addrs[:10]:
+                    rows.append(
+                        f"<tr><td><code>{escape(str(a.get('address','')))}</code></td>"
+                        f"<td>{escape(str(a.get('source',''))[:40])}</td>"
+                        f"<td>{escape(str(a.get('context',''))[:50])}</td></tr>"
+                    )
+                blocks.append(
+                    f"<h3>{escape(str(curr).upper())} ({len(addrs)})</h3>"
+                    f"<table><tr><th>Address</th><th>Source</th><th>Context</th></tr>{''.join(rows)}</table>"
+                )
+            return ''.join(blocks)
+
+        def _render_misconfigs():
+            blocks = []
+            for sev, items in report['misconfigurations']['by_severity'].items():
+                rows = []
+                for m in items[:10]:
+                    rows.append(
+                        f"<tr><td>{escape(str(m.get('url',''))[:40])}</td>"
+                        f"<td>{escape(str(m.get('type',''))[:30])}</td>"
+                        f"<td>{escape(str(m.get('detail',''))[:50])}</td></tr>"
+                    )
+                if rows:
+                    blocks.append(
+                        f"<h3 class='{escape(str(sev).lower())}'>{escape(str(sev))} ({len(items)})</h3>"
+                        f"<table><tr><th>URL</th><th>Type</th><th>Detail</th></tr>{''.join(rows)}</table>"
+                    )
+            return ''.join(blocks)
+
+        crypto_html = _render_crypto()
+        misconfigs_html = _render_misconfigs()
+
         html = f"""<!DOCTYPE html>
 <html>
 <head>
@@ -894,10 +953,10 @@ class ReportGenerator:
 </table>
 
 <h2>Cryptocurrency Addresses ({report['crypto_addresses']['total_found']})</h2>
-{''.join(f"<h3>{curr.upper()} ({len(addrs)})</h3><table><tr><th>Address</th><th>Source</th><th>Context</th></tr>{''.join(f'<tr><td><code>{a[\"address\"]}</code></td><td>{a[\"source\"][:40]}</td><td>{a[\"context\"][:50]}</td></tr>' for a in addrs[:10])}</table>" for curr, addrs in report['crypto_addresses']['by_currency'].items())}
+{crypto_html}
 
 <h2>Misconfigurations ({report['misconfigurations']['total']})</h2>
-{''.join(f"<h3 class='{sev.lower()}'>{sev} ({len(items)})</h3><table><tr><th>URL</th><th>Type</th><th>Detail</th></tr>{''.join(f'<tr><td>{m[\"url\"][:40]}</td><td>{m[\"type\"][:30]}</td><td>{m[\"detail\"][:50]}</td></tr>' for m in items[:10])}</table>" for sev, items in report['misconfigurations']['by_severity'].items() if items)}
+{misconfigs_html}
 
 <h2>Persona Comparisons</h2>
 <table>
