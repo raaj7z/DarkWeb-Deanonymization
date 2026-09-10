@@ -1,6 +1,5 @@
-# service.py — NEW
-# Pure functions that CLI and (later) any UI can call.
-# No menu logic here, no print prompts — just callable actions.
+# service.py — Pure functions for CLI and (later) any UI.
+# No menu logic, no print prompts — just callable actions.
 import os
 import json
 import uuid
@@ -54,7 +53,7 @@ def run_crawl(urls, target_username=None,
     db = db or Database()
     session_id = session_id or new_session_id()
 
-    # create session row if missing
+    # create session row
     try:
         db.create_session(target_username, urls)
     except Exception:
@@ -75,12 +74,15 @@ def run_crawl(urls, target_username=None,
         urls, target_username=target_username, use_js=use_js
     )
 
-    # Flatten results into two buckets — same logic the CLI will use for reports
+    # Flatten results into two buckets
     actor_rows, network_rows = flatten_results(results, session_id)
 
     # Persist to new tables
-    dbq.write_actor_rows(actor_rows)
-    dbq.write_network_rows(network_rows)
+    try:
+        dbq.write_actor_rows(actor_rows)
+        dbq.write_network_rows(network_rows)
+    except Exception as e:
+        warn(f"[service] DB write failed: {e}")
 
     summary = {
         'urls_crawled': len(urls),
@@ -120,12 +122,14 @@ def flatten_results(results, session_id):
 
     for r in results:
         intel = r.get('intel') or {}
-        # Merge crawler-level fields into intel so cleaner sees everything
         merged = dict(intel)
         merged.setdefault('url', r.get('url'))
         merged.setdefault('headers', {})
-        # If crawler already ran banner/tls/status in crawl_single, they're in intel
-        # If not, cleaner skips them gracefully.
+        # Fill in crawler-level extras the cleaner might want
+        if 'emails' not in merged:
+            merged['emails'] = r.get('emails', [])
+        if 'usernames' not in merged:
+            merged['usernames'] = r.get('usernames', [])
 
         try:
             a, n = cleaner.clean(merged)
@@ -136,13 +140,12 @@ def flatten_results(results, session_id):
 
     return actor_rows, network_rows
 
-
 def run_autonomous(urls, target_username=None,
                    hours=1, interval_minutes=30,
                    workers=3, session_id=None, db=None):
     """
     Blocking call — runs the crawler in autonomous mode.
-    For CLI, this is fine. For a UI later, wrap in a thread and poll db.jobs.
+    For CLI, this is fine.
     """
     db = db or Database()
     session_id = session_id or new_session_id()
