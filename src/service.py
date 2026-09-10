@@ -1,0 +1,216 @@
+# service.py — NEW
+# Pure functions that CLI and (later) any UI can call.
+# No menu logic here, no print prompts — just callable actions.
+import os
+import json
+import uuid
+from datetime import datetime
+from pathlib import Path
+
+from config import OUTPUT_DIR, REPORT_DIR
+from database import Database
+from crawler import DarkCrawler
+from ai_cleaner import AICleaner
+from db import queries as dbq
+from utils import get_tor_session, verify_tor, info, success, error, warn
+
+
+def new_session_id():
+    """Short 8-char session id — matches your original format."""
+    return str(uuid.uuid4())[:8]
+
+
+def check_tor():
+    """Verify Tor is up. Returns (bool, message)."""
+    try:
+        s = get_tor_session()
+        ok = verify_tor(s)
+        return ok, "Tor OK" if ok else "Tor verification failed"
+    except Exception as e:
+        return False, f"Tor error: {e}"
+
+
+def run_crawl(urls, target_username=None,
+              workers=3, use_js=False,
+              rotate_circuits=True, rotate_every=10,
+              session_id=None, db=None):
+    """
+    Run one crawl session over the given URLs.
+
+    Returns dict:
+      {
+        session_id,
+        results,          # raw crawler results
+        actor_rows,       # flattened OSINT + posts for report 1
+        network_rows,     # flattened network artifacts for report 2
+        actor_count,
+        network_count,
+        summary
+      }
+    """
+    if not urls:
+        return {'error': 'no urls provided'}
+
+    db = db or Database()
+    session_id = session_id or new_session_id()
+
+    # create session row if missing
+    try:
+        db.create_session(target_username, urls)
+    except Exception:
+        pass
+
+    info(f"[service] starting crawl — session {session_id}, {len(urls)} urls")
+
+    crawler = DarkCrawler(
+        db=db,
+        session_id=session_id,
+        max_workers=workers,
+        use_js=use_js,
+        rotate_circuits=rotate_circuits,
+        rotate_every=rotate_every,
+    )
+
+    results = crawler.crawl_concurrent(
+        urls, target_username=target_username, use_js=use_js
+    )
+
+    # Flatten results into two buckets — same logic the CLI will use for reports
+    actor_rows, network_rows = flatten_results(results, session_id)
+
+    # Persist to new tables
+    dbq.write_actor_rows(actor_rows)
+    dbq.write_network_rows(network_rows)
+
+    summary = {
+        'urls_crawled': len(urls),
+        'urls_ok': sum(1 for r in results if r.get('success')),
+        'actor_rows': len(actor_rows),
+        'network_rows': len(network_rows),
+    }
+
+    try:
+        db.complete_session(session_id, summary)
+    except Exception:
+        pass
+
+    try:
+        crawler.close()
+    except Exception:
+        pass
+
+    return {
+        'session_id': session_id,
+        'results': results,
+        'actor_rows': actor_rows,
+        'network_rows': network_rows,
+        'actor_count': len(actor_rows),
+        'network_count': len(network_rows),
+        'summary': summary,
+    }
+
+
+def flatten_results(results, session_id):
+    """
+    Takes crawler results, runs the AI cleaner on each page's intel,
+    returns (actor_rows, network_rows).
+    """
+    cleaner = AICleaner(session_id=session_id)
+    actor_rows, network_rows = [], []
+
+    for r in results:
+        intel = r.get('intel') or {}
+        # Merge crawler-level fields into intel so cleaner sees everything
+        merged = dict(intel)
+        merged.setdefault('url', r.get('url'))
+        merged.setdefault('headers', {})
+        # If crawler already ran banner/tls/status in crawl_single, they're in intel
+        # If not, cleaner skips them gracefully.
+
+        try:
+            a, n = cleaner.clean(merged)
+            actor_rows.extend(a)
+            network_rows.extend(n)
+        except Exception as e:
+            warn(f"[service] cleaner failed on {r.get('url','?')[:40]}: {e}")
+
+    return actor_rows, network_rows
+
+
+def run_autonomous(urls, target_username=None,
+                   hours=1, interval_minutes=30,
+                   workers=3, session_id=None, db=None):
+    """
+    Blocking call — runs the crawler in autonomous mode.
+    For CLI, this is fine. For a UI later, wrap in a thread and poll db.jobs.
+    """
+    db = db or Database()
+    session_id = session_id or new_session_id()
+    try:
+        db.create_session(target_username, urls)
+    except Exception:
+        pass
+
+    crawler = DarkCrawler(db=db, session_id=session_id, max_workers=workers)
+    result = crawler.autonomous_crawl(
+        seed_urls=urls,
+        target_username=target_username,
+        duration_hours=hours,
+        interval_minutes=interval_minutes,
+    )
+    try:
+        crawler.close()
+    except Exception:
+        pass
+    return {'session_id': session_id, **result}
+
+
+def get_session_summary(session_id, db=None):
+    """Pull a session's stats from the new tables."""
+    db = db or Database()
+    conn = dbq.get_conn()
+    try:
+        cur = conn.cursor()
+        rows = {}
+        for table in ('osint_entities', 'stylo_posts', 'network_artifacts'):
+            r = cur.execute(
+                f'SELECT COUNT(*) FROM {table} WHERE session_id=?',
+                (session_id,),
+            ).fetchone()
+            rows[table] = r[0] if r else 0
+        return rows
+    finally:
+        conn.close()
+
+
+def write_session_reports(session_id, actor_rows, network_rows):
+    """
+    Writes two JSON files under output/session_<id>/:
+      actor_report.json    → for the OSINT engine
+      network_report.json  → for you (network analysis)
+    """
+    out_dir = Path(OUTPUT_DIR) / f'session_{session_id}'
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    actor_path = out_dir / 'actor_report.json'
+    network_path = out_dir / 'network_report.json'
+
+    with open(actor_path, 'w', encoding='utf-8') as f:
+        json.dump({
+            'session_id': session_id,
+            'generated_at': datetime.utcnow().isoformat(),
+            'count': len(actor_rows),
+            'rows': actor_rows,
+        }, f, indent=2, ensure_ascii=False, default=str)
+
+    with open(network_path, 'w', encoding='utf-8') as f:
+        json.dump({
+            'session_id': session_id,
+            'generated_at': datetime.utcnow().isoformat(),
+            'count': len(network_rows),
+            'rows': network_rows,
+        }, f, indent=2, ensure_ascii=False, default=str)
+
+    success(f"[service] actor_report   → {actor_path}")
+    success(f"[service] network_report → {network_path}")
+    return str(actor_path), str(network_path)
