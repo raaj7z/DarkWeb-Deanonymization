@@ -1,5 +1,6 @@
 # cli.py — NEW interactive menu
-# Replaces main.py. Uses service.py functions so all actions are reusable.
+# Uses service.py functions so all actions are reusable.
+# Runs all three report tiers after each crawl.
 import os
 import sys
 import json
@@ -7,7 +8,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from utils import (
     print_banner, info, success, error, warn,
-    get_tor_session, get_tor_ip, get_real_ip,
+    get_tor_session, get_tor_ip,
 )
 from service import (
     check_tor, run_crawl, run_autonomous,
@@ -20,14 +21,12 @@ from config import OUTPUT_DIR
 
 def verify_anonymity_safe():
     """
-    Anonymity check without leaking your real IP on startup.
-    Compares Tor-exit IP prefix against a coarse list of known Tor ranges.
+    Anonymity check without leaking real IP on startup.
     """
     session = get_tor_session()
     tor_ip = get_tor_ip(session)
     info(f"Tor IP: {tor_ip}")
 
-    # Coarse check — real verification happens via check.torproject.org inside verify_tor()
     ok, msg = check_tor()
     if ok:
         success("Anonymity confirmed!")
@@ -37,7 +36,7 @@ def verify_anonymity_safe():
 
 
 def get_urls_from_user():
-    """Same UX as your original main.py — custom, defaults, or file."""
+    """Same UX as original main.py — custom, defaults, or file."""
     print("\n" + "=" * 50)
     print("URL INPUT OPTIONS")
     print("=" * 50)
@@ -85,8 +84,8 @@ def show_history(db):
         return
 
     for s in sessions[:10]:
-        status_mark = "✅" if s['status'] == 'completed' else "🔄"
-        print(f"\n{status_mark} Session: {s['session_id']}")
+        status_mark = "OK" if s['status'] == 'completed' else "..."
+        print(f"\n[{status_mark}] Session: {s['session_id']}")
         print(f"   Target: {s['target_username'] or 'All'}")
         print(f"   Started: {s['started_at']}")
         print(f"   Status: {s['status']}")
@@ -106,7 +105,7 @@ def show_full_stats(db):
     print("=" * 50)
     stats = db.get_stats()
     for table, count in stats.items():
-        print(f"  {table:15} → {count} records")
+        print(f"  {table:15} -> {count} records")
 
 
 def search_past_data(db):
@@ -134,6 +133,7 @@ def search_past_data(db):
 
 
 def run_crawl_session(db):
+    """Runs a crawl, then produces ALL THREE report tiers."""
     target = input("\nTarget username to track (Enter to skip): ").strip() or None
     urls = get_urls_from_user()
     if not urls:
@@ -152,7 +152,9 @@ def run_crawl_session(db):
     rotate_every = 10
     if rotate:
         try:
-            rotate_every = int(input("Rotate circuit every N requests [default 10]: ").strip() or '10')
+            rotate_every = int(
+                input("Rotate circuit every N requests [default 10]: ").strip() or '10'
+            )
         except Exception:
             rotate_every = 10
 
@@ -179,15 +181,37 @@ def run_crawl_session(db):
     success(f"Actor rows   : {summary['actor_rows']}")
     success(f"Network rows : {summary['network_rows']}")
 
-    # Write the two report files
-    actor_path, network_path = write_session_reports(
-        session_id,
-        bundle['actor_rows'],
-        bundle['network_rows'],
-    )
-    success(f"Actor report   : {actor_path}")
-    success(f"Network report : {network_path}")
+    # ── TIER 2: two focused reports (actor + network) ──
+    try:
+        write_session_reports(
+            session_id,
+            bundle['actor_rows'],
+            bundle['network_rows'],
+        )
+        success(f"Tier 2 reports: output/session_{session_id}/")
+    except Exception as e:
+        warn(f"Tier 2 report failed: {e}")
 
+    # ── TIER 1: full DB snapshot via YOUR report_generator.py ──
+    try:
+        from report_generator import ReportGenerator
+        full_path = ReportGenerator(db).save_json(session_id)
+        success(f"Tier 1 full snapshot: {full_path}")
+    except Exception as e:
+        warn(f"Tier 1 snapshot failed: {e}")
+
+    # ── TIER 3: CSV / JSONL exports ──
+    try:
+        from reports.exporters import export_session
+        paths = export_session(
+            session_id,
+            bundle['actor_rows'],
+            bundle['network_rows'],
+            formats=('csv', 'jsonl'),
+        )
+        success(f"Tier 3 exports: {len(paths)} files written")
+    except Exception as e:
+        warn(f"Tier 3 export failed: {e}")
 
 def run_autonomous_menu(db):
     urls = get_urls_from_user()
@@ -227,7 +251,7 @@ def query_timeline_menu(db):
 
     print(f"\nFound {len(results)} crawls between {start} and {end}")
     for r in results[:10]:
-        print(f"  {r['crawled_at']} — {r['url'][:50]}")
+        print(f"  {r['crawled_at']} -- {r['url'][:50]}")
         try:
             print(f"    Descriptor issues: {r['descriptor_issues']}")
             print(f"    Trust links: {r['trust_links_found']}")
@@ -245,7 +269,7 @@ def view_relationships_menu(db):
 
     print(f"\nFound {len(relationships)} relationships")
     for r in relationships[:20]:
-        print(f"  {r['from_actor']} → {r['to_actor']} [{r['link_type']}]")
+        print(f"  {r['from_actor']} -> {r['to_actor']} [{r['link_type']}]")
         if r.get('wallet_address'):
             print(f"    Wallet: {r['wallet_address']}")
 
@@ -257,7 +281,7 @@ def view_session_summary_menu():
     summary = get_session_summary(sid)
     print(f"\nSession {sid} — new tables:")
     for table, count in summary.items():
-        print(f"  {table:18} → {count}")
+        print(f"  {table:18} -> {count}")
 
 
 def main_menu():
