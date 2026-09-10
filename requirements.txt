@@ -1,32 +1,25 @@
-# ─────────────────────────────────────────────
-# DarkWeb-Deanonymization — Python dependencies
-# Install: pip install -r requirements.txt
-# ─────────────────────────────────────────────
-
-# Core HTTP + Tor routing
+requests==2.31.0
 requests[socks]==2.31.0
-PySocks==1.7.1
-
-# HTML parsing
 beautifulsoup4==4.12.2
-
-# Terminal UI
 colorama==0.4.6
 tqdm==4.66.1
 fake-useragent==1.4.0
-
-# TLS / crypto validation
+stem==1.8.2
+PySocks==1.7.1
+nltk==3.8.1
+scikit-learn==1.3.2
+numpy==1.26.2
+reportlab==4.0.7
+networkx==3.2.1
+flask==3.0.0
+cryptography==42.0.8
+requests[socks]==2.31.0
+beautifulsoup4==4.12.2
+colorama==0.4.6
+tqdm==4.66.1
+fake-useragent==1.4.0
+PySocks==1.7.1
 cryptography>=42.0.0
 base58==2.1.1
-
-# Tor control port (circuit rotation)
+scikit-learn>=1.3.0   # optional — for future ML
 stem==1.8.2
-
-# PDF report generation
-reportlab>=4.0.0
-
-# Optional: ML classifier (safe to install even if unused)
-scikit-learn>=1.3.0
-
-# Optional: JS rendering (only used if use_js=True)
-selenium>=4.15.0
