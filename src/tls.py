@@ -1,4 +1,4 @@
-# tls.py — NEW FILE
+
 # Thin wrapper around IntelExtractor.get_ssl_info.
 # Used by the crawler to fetch TLS certificates over Tor SOCKS5.
 from intel_extractor import IntelExtractor
