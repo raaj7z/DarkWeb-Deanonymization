@@ -1,6 +1,6 @@
 # DarkWeb-Deanonymization
 
-**SIH26151 — NTRO Dark Web Threat Actor De-anonymization**
+** Dark Web Threat Actor De-anonymization**
 
 Advanced Tor hidden service crawler with AI-based entity triage, network infrastructure analysis, and structured reporting for OSINT handoff.
 
