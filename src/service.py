@@ -185,32 +185,8 @@ def get_session_summary(session_id, db=None):
 
 def write_session_reports(session_id, actor_rows, network_rows):
     """
-    Writes two JSON files under output/session_<id>/:
-      actor_report.json    → for the OSINT engine
-      network_report.json  → for you (network analysis)
+    Delegates to reports.report_builder.produce_all_reports.
+    Writes actor_report.json + network_report.json + CSV/JSON/JSONL exports.
     """
-    out_dir = Path(OUTPUT_DIR) / f'session_{session_id}'
-    out_dir.mkdir(parents=True, exist_ok=True)
-
-    actor_path = out_dir / 'actor_report.json'
-    network_path = out_dir / 'network_report.json'
-
-    with open(actor_path, 'w', encoding='utf-8') as f:
-        json.dump({
-            'session_id': session_id,
-            'generated_at': datetime.utcnow().isoformat(),
-            'count': len(actor_rows),
-            'rows': actor_rows,
-        }, f, indent=2, ensure_ascii=False, default=str)
-
-    with open(network_path, 'w', encoding='utf-8') as f:
-        json.dump({
-            'session_id': session_id,
-            'generated_at': datetime.utcnow().isoformat(),
-            'count': len(network_rows),
-            'rows': network_rows,
-        }, f, indent=2, ensure_ascii=False, default=str)
-
-    success(f"[service] actor_report   → {actor_path}")
-    success(f"[service] network_report → {network_path}")
-    return str(actor_path), str(network_path)
+    from reports.report_builder import produce_all_reports
+    return produce_all_reports(session_id, actor_rows, network_rows)
