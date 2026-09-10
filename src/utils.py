@@ -1,4 +1,3 @@
-
 import requests
 import logging
 import random
@@ -8,6 +7,13 @@ import sqlite3
 import os
 
 init(autoreset=True)
+
+# ── logger hook (ADDED — optional, doesn't affect existing behavior) ──
+try:
+    from logging_setup import get_logger
+    _log = get_logger('utils')
+except Exception:
+    _log = None
 
 # colours
 def success(msg): print(f"{Fore.GREEN}[+]{Style.RESET_ALL} {msg}")
