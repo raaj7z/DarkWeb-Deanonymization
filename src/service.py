@@ -1,16 +1,3 @@
-# service.py — PRALAYX crawler integration service
-"""
-Crawler-facing orchestration layer.
-
-Design goals:
-- Preserve the existing crawler implementation and its extraction logic.
-- Allow PRALAYX to supply a stable session_id so crawler output belongs to the
-  same investigation/session shown by the platform.
-- Keep the crawler's native SQLite database separate from the PRALAYX database.
-- Never silently replace or delete historical crawler data.
-- Return structured results to the platform instead of making the UI depend on
-  crawler-internal tables.
-"""
 
 from __future__ import annotations
 
