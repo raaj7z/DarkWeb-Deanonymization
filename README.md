@@ -1,234 +1,193 @@
 # DarkWeb-Deanonymization
 
-** Dark Web Threat Actor De-anonymization**
+[![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
+[![Tor](https://img.shields.io/badge/Tor-SOCKS5-purple.svg)](https://www.torproject.org/)
+[![Playwright](https://img.shields.io/badge/Playwright-Async-green.svg)](https://playwright.dev/)
+[![License](https://img.shields.io/badge/License-Proprietary-red.svg)]()
 
-Advanced Tor hidden service crawler with AI-based entity triage, network infrastructure analysis, and structured reporting for OSINT handoff.
-
----
-
-## Pipeline
-
-```
-Crawler → AI Cleaner → 2 buckets → 3 report tiers
-```
-
-1. **Crawler** collects pages via Tor, extracts raw intelligence
-2. **AI Cleaner** classifies findings into actor + network buckets
-3. **Three report tiers** produced for every session
-
-| Tier | Output | Purpose |
-|------|--------|---------|
-| 1 | `reports/report_<id>.json` | Full DB snapshot (all tables) — audit trail |
-| 2 | `output/session_<id>/actor_report.json` | **Report 1** — handoff to OSINT engine |
-| 2 | `output/session_<id>/network_report.json` | **Report 2** — network infrastructure |
-| 3 | `output/session_<id>/*.csv / *.jsonl` | Exports for spreadsheets / external tools |
+> Autonomous Dark Web Onion Crawler & Operational Security (OPSEC) Exposure Analyzer.
 
 ---
 
-## Quick Start
+## 📋 Table of Contents
+- [Overview](#overview)
+- [Architecture & Modules](#architecture--modules)
+- [Repository Structure](#repository-structure)
+- [Key Features](#key-features)
+- [Environment Requirements](#environment-requirements)
+- [Installation & Setup](#installation--setup)
+- [Usage & CLI Reference](#usage--cli-reference)
+  - [Windows Command Line](#windows-command-line)
+  - [Linux / WSL with Native Tor](#linux--wsl-with-native-tor)
+- [OPSEC Misconfiguration Categories](#opsec-misconfiguration-categories)
+- [Output Data Formats](#output-data-formats)
 
-### One-shot setup (Linux / WSL)
+---
 
-```bash
-bash setup.sh
+## 🔍 Overview
+
+**DarkWeb-Deanonymization** is a command-line dark web intelligence crawler designed to de-anonymize `.onion` hidden services by detecting technical misconfigurations and operational security exposures. It harvests PGP keys, cryptocurrency wallet addresses, clearnet domain references, exposed Apache `/server-status` pages, SSL/TLS certificate Subject Alternative Names (SANs), and default SSH/Web service banners.
+
+---
+
+## 🏗️ Architecture & Modules
+
+```
+                        +----------------------------+
+                        |      CLI Entry Point       |
+                        |       (src/cli.py)         |
+                        +-------------+--------------+
+                                      |
+                                      v
+                        +----------------------------+
+                        |     Onion Web Crawler      |
+                        |     (src/crawler.py)       |
+                        +-------------+--------------+
+                                      | SOCKS5 Proxy
+                                      v
+                        +----------------------------+
+                        |   Tor Proxy Controller     |
+                        | (src/tor_controller.py)    |
+                        +-------------+--------------+
+                                      |
+       +-----------------+------------+------------+-----------------+
+       |                 |                         |                 |
+       v                 v                         v                 v
++--------------+  +--------------+          +--------------+  +--------------+
+| Server Status|  | TLS Cert     |          | Service      |  | Intel        |
+| Detector     |  | Extractor    |          | Banner       |  | Harvester    |
+| (src/server_ |  | (src/tls.py) |          | Scanner      |  | (src/intel_  |
+|  status.py)  |  +--------------+          | (src/banner. |  |  extractor.  |
++--------------+                            |  py)         |  |  py)         |
+                                            +--------------+  +--------------+
+                                                                     |
+                                                                     v
+                                                            +----------------+
+                                                            | Report Builder |
+                                                            | (src/report_   |
+                                                            |  generator.py) |
+                                                            +----------------+
 ```
 
-### Manual setup
+---
+
+## 📁 Repository Structure
+
+```
+DarkWeb-Deanonymization/
+├── src/
+│   ├── cli.py                 # Main CLI command-line interface
+│   ├── main.py                # Pipeline execution wrapper
+│   ├── crawler.py             # Async onion website crawler
+│   ├── tor_controller.py      # Tor SOCKS5 proxy status checker & connector
+│   ├── server_status.py       # Exposed /server-status and /server-info detector
+│   ├── tls.py                 # SSL/TLS Certificate CN & SAN clearnet link extractor
+│   ├── banner.py              # Default SSH, FTP, Apache, Nginx banner scanner
+│   ├── intel_extractor.py     # PGP key, Crypto wallet, Email, Handle harvester
+│   ├── report_generator.py   # Exporters for JSON, JSONL, CSV reports
+│   ├── captcha_handler.py     # Captcha detection and handling routines
+│   ├── js_renderer.py         # Headless browser (Playwright) dynamic JS renderer
+│   ├── ai_cleaner.py          # Noise reduction and text cleaner
+│   ├── alive_checker.py       # Onion service HTTP/SOCKS reachability validator
+│   ├── config.py              # Crawler settings and regex configurations
+│   ├── database.py            # SQLite session storage
+│   ├── models.py              # Data models for findings, pages, and targets
+│   ├── db/
+│   │   ├── schema.py          # SQLite database schema
+│   │   └── queries.py         # Database query helpers
+│   └── reports/
+│       ├── actor_report.py    # Threat actor report formatter
+│       ├── network_report.py  # Network exposure report formatter
+│       └── exporters.py       # File export helper functions
+├── data/                      # Session database files
+├── logs/                      # Session execution log files
+├── output/                    # Crawl session reports (JSON, JSONL, CSV)
+├── .gitignore                 # Git ignore rules for outputs and logs
+└── requirements.txt           # Python dependencies
+```
+
+---
+
+## ✨ Key Features
+
+- **Onion Crawling over Tor**: Crawls `.onion` hidden services via SOCKS5 proxy (`127.0.0.1:9050`).
+- **Exposed Server-Status Detection**: Detects unauthenticated Apache `/server-status` and `/server-info` pages revealing client IP addresses.
+- **SSL/TLS Certificate Leak Harvesting**: Extracts Subject Alternative Names (SANs) and Common Names (CNs) from TLS certificates to uncover associated clearnet domains.
+- **Service Banner Fingerprinting**: Collects OpenSSH, Apache, Nginx, and FTP banners to match against clear-web server footprints.
+- **Technical Intelligence Extraction**: Automatically harvests Bitcoin (BTC) addresses, PGP Public Keys, email addresses, and social handles.
+- **Structured Exporting**: Generates standardized JSON, JSONL, CSV reports and updates SQLite database tables.
+
+---
+
+## 🔧 Environment Requirements
+
+- **Python**: Python 3.10+
+- **Tor Proxy**: Tor daemon running on `127.0.0.1:9050` (via Linux, WSL `sudo service tor start`, or Windows Tor SOCKS Bridge).
+- **Playwright** (Optional for JS rendering): `playwright install chromium`
+
+---
+
+## 🚀 Installation & Setup
+
+1. **Clone Repository**:
+   ```bash
+   git clone https://github.com/raaj7z/DarkWeb-Deanonymization.git
+   cd DarkWeb-Deanonymization
+   ```
+
+2. **Set up Virtual Environment**:
+   ```bash
+   python -m venv venv
+   source venv/bin/activate  # On Windows: .\venv\Scripts\Activate.ps1
+   ```
+
+3. **Install Dependencies**:
+   ```bash
+   pip install -r requirements.txt
+   playwright install chromium
+   ```
+
+---
+
+## 💻 Usage & CLI Reference
+
+### Windows Command Line
+
+```powershell
+# Run a single target crawl via local SOCKS proxy
+python -m src.cli scan --url "http://darkmarket-v2.onion" --socks 127.0.0.1:9050
+```
+
+### Linux / WSL with Native Tor
 
 ```bash
-# System packages
-sudo apt install -y python3 python3-venv tor
+# Start Tor daemon
 sudo service tor start
 
-# Python environment
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-
-# Folders
-mkdir -p data output logs reports
+# Execute crawler with depth=2
+python -m src.cli crawl --url "http://darkmarket-v2.onion" --depth 2 --output output/
 ```
 
-### Run
+### CLI Command Options
 
-```bash
-source venv/bin/activate
-python src/cli.py
-```
-
----
-
-## Features
-
-### Crawling
-- Tor-routed HTTP via SOCKS5
-- Multi-threaded (configurable workers, thread-safe)
-- Circuit rotation (via stem, optional)
-- CAPTCHA / block detection (no bypass — honest)
-- Optional JS rendering (Selenium + Chromium)
-- Autonomous mode: continuous crawl with URL discovery
-
-### Extraction
-- Usernames, handles, aliases
-- Crypto wallets (BTC, BTC-bech32, ETH, XMR, LTC, DASH, Zcash)
-- Base58 checksum validation for BTC/LTC/DASH
-- PGP keys, emails, Telegram, Jabber, Session IDs
-- Posts with timestamps + preserved raw HTML (for stylometry)
-- Trust links (vouches, wallet associations, PGP signature chains)
-
-### Network Intelligence (SIH Capability 1)
-- SOCKS-based **banner grabbing** (SSH/HTTP/FTP/SMTP/MySQL)
-- SOCKS-based **TLS certificate fetch** (SANs, CN, issuer, fingerprint)
-- **Server-status probing**: `/server-status`, `/nginx_status`, `/phpinfo`, `/.env`, `/.git/config`, `/backup.sql`
-- **Descriptor leak analysis**: clearnet URLs, exposed IPs, clearnet emails, server date leakage
-- Default banner detection (Apache/2.4.41, nginx/1.18.0, OpenSSH_7.9)
-
-### AI Filter
-- Rule-based 2-bucket classifier (actor / network)
-- Username deduplication + blacklist
-- Boilerplate stripping
-- Category tagging: `drugs`, `arms`, `data`, `hacking`, `finance`, `unknown`
-- Confidence scoring: `LOW`, `MEDIUM`, `HIGH`, `VERY_HIGH`
-- Optional ML layer (scikit-learn hook, disabled by default)
-
-### Reporting
-- **Tier 1**: full DB snapshot (via `report_generator.py`)
-- **Tier 2**: two focused JSON reports (actor + network)
-- **Tier 3**: CSV + JSONL exports
-- Timeline queries
-- Actor relationship graph data
+| Argument | Description | Default |
+| :--- | :--- | :--- |
+| `--url` | Target `.onion` service URL | Required |
+| `--socks` | SOCKS5 proxy address | `127.0.0.1:9050` |
+| `--depth` | Maximum crawling depth | `2` |
+| `--output` | Output report directory | `output/` |
 
 ---
 
-## Module Map
+## 🛡️ OPSEC Misconfiguration Categories
 
-| File | Purpose |
-|------|---------|
-| `config.py` | Paths, toggles, categories, blacklist |
-| `logging_setup.py` | Structured logger (console + file) |
-| `models.py` | Entity dataclasses (`OsintEntity`, `StyloPost`, `NetworkArtifact`) |
-| `utils.py` | Tor session, colored output, IP checks |
-| `ai_cleaner.py` | Two-bucket classifier |
-| `intel_extractor.py` | Extraction + checksum validation + raw HTML preservation |
-| `banner.py` | SOCKS-based banner grabbing |
-| `tls.py` | SOCKS-based TLS cert fetch |
-| `server_status.py` | Misconfiguration endpoint probing |
-| `crawler.py` | Main crawler (v3.1, thread-safe) |
-| `alive_checker.py` | URL liveness check |
-| `captcha_handler.py` | CAPTCHA / block detection |
-| `tor_controller.py` | Circuit rotation via stem |
-| `js_renderer.py` | Optional Selenium rendering |
-| `database.py` | Original DB layer (all tables) |
-| `db/schema.py` | New tables + standard columns |
-| `db/queries.py` | New-table read/write helpers |
-| `service.py` | Pure functions (CLI + future UI) |
-| `cli.py` | Interactive menu |
-| `report_generator.py` | Full DB snapshot (Tier 1) |
-| `reports/actor_report.py` | Report 1 — Actor intelligence |
-| `reports/network_report.py` | Report 2 — Network infrastructure |
-| `reports/exporters.py` | CSV / JSON / JSONL export |
-| `reports/report_builder.py` | One-shot report pipeline |
+1. **Exposed Server Status**: Publicly accessible `/server-status` exposing active HTTP connections and internal IP addresses.
+2. **Clearnet SSL/TLS Certificate**: Certificates sharing common SAN/CN fields between `.onion` hidden services and clearnet `.com`/`.org` domains.
+3. **Default Service Banners**: Server software banners exposing specific OS build versions (e.g. `OpenSSH_7.9p1 Debian 10`).
+4. **Descriptor & Metadata Inconsistency**: Clearnet emails, author handles, or PGP key signatures embedded in web source metadata.
 
 ---
 
-## Database Schema
+## 📜 License
 
-### Original tables (from `database.py`)
-`sessions`, `sites`, `site_checks`, `pages`, `usernames`, `posts`, `links`, `investigations`, `crypto_addresses`, `misconfigs`, `server_fingerprints`, `profiles`, `timed_posts`, `timing_analysis`, `service_banners`, `descriptor_checks`, `trust_links`, `timeline_crawls`
-
-### New tables (from `db/schema.py`)
-| Table | Purpose |
-|-------|---------|
-| `osint_entities` | Handles, wallets, PGP, emails, channels |
-| `stylo_posts` | Author-tagged posts + raw HTML refs |
-| `network_artifacts` | TLS, banners, server-status, headers, paths |
-| `actor_ids` | Actor ID registry (`ACT-001`, etc.) |
-| `jobs` | Background job tracking |
-
----
-
-## CLI Menu
-
-```
-1. Start new crawl session    → runs all 3 report tiers
-2. View session history
-3. View database stats
-4. Search past data by username
-5. Exit
-6. Autonomous crawl mode
-7. Query timeline
-8. View actor relationships
-9. Session summary (new tables)
-```
-
----
-
-## SIH26151 Capability Mapping
-
-| PS Requirement | Implementation |
-|----------------|----------------|
-| Misconfiguration detection (server-status, banners, TLS) | `server_status.py`, `banner.py`, `tls.py` |
-| SSL cert SAN analysis | `intel_extractor.get_ssl_info` |
-| Relationship graph data | `crawler.extract_trust_links()` → `trust_links` table |
-| Actor profiles (handles, wallets, PGP) | `ai_cleaner.py` → `osint_entities` table |
-| Timeline query | `cli.py` option 7 |
-| Autonomous mode | `crawler.autonomous_crawl()` |
-| CSV / JSON export | `reports/exporters.py` + `report_generator.py` |
-| AI-based analysis | `ai_cleaner.py` (rules + confidence scoring) |
-
-**Future work (OSINT engine repo):**
-- Stylometric persona linkage
-- Cross-marketplace actor resolution
-- Blockchain enrichment (wallet clustering)
-- Threat feed correlation
-- Analytical dashboard (Flask / Streamlit)
-
----
-
-## Testing
-
-```bash
-# Full pipeline sanity check (no Tor needed)
-python test_pipeline.py
-
-# CLI (needs Tor running)
-python src/cli.py
-```
-
----
-
-## Output Structure
-
-```
-output/
-  session_<id>/
-    raw_pages/             # Full HTML per crawled page
-    raw_posts/             # Preserved post HTML (for stylometry)
-    actor_report.json      # Report 1
-    network_report.json    # Report 2
-    actor.json             # Raw rows for OSINT
-    actor.jsonl
-    actor.csv
-    network.json
-    network.jsonl
-    network.csv
-reports/
-  report_<id>.json         # Tier 1 full snapshot
-logs/
-  crawl_YYYYMMDD.log
-data/
-  crawler.db               # SQLite (WAL mode)
-```
-
----
-
-## Legal & Ethical Notice
-
-This tool is designed for **authorized law enforcement, government agencies, and authorized security research only**. Unauthorized access to computer systems is illegal under the Computer Fraud & Abuse Act (CFAA) and applicable international law. All users are responsible for compliance.
-
----
-
-**Version:** 4.0
-**Last Updated:** September 2026
-**Maintainer:** @raaj7z
-**License:** Authorized Use Only
+Proprietary — Dark Web OPSEC De-anonymization Module.
