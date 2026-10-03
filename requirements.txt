@@ -1,25 +1,22 @@
-requests==2.31.0
-requests[socks]==2.31.0
-beautifulsoup4==4.12.2
-colorama==0.4.6
-tqdm==4.66.1
-fake-useragent==1.4.0
-stem==1.8.2
-PySocks==1.7.1
-nltk==3.8.1
-scikit-learn==1.3.2
-numpy==1.26.2
-reportlab==4.0.7
-networkx==3.2.1
-flask==3.0.0
-cryptography==42.0.8
-requests[socks]==2.31.0
-beautifulsoup4==4.12.2
-colorama==0.4.6
-tqdm==4.66.1
-fake-useragent==1.4.0
-PySocks==1.7.1
-cryptography>=42.0.0
-base58==2.1.1
-scikit-learn>=1.3.0   # optional — for future ML
-stem==1.8.2
+# Dark Web Crawling & SOCKS5 Proxy
+requests>=2.31.0,<3.0.0
+PySocks>=1.7.1,<2.0.0
+stem>=1.8.2,<2.0.0
+fake-useragent>=1.4.0,<2.0.0
+beautifulsoup4>=4.12.2,<5.0.0
+
+# Forensics, Hashing & Cryptography
+cryptography>=42.0.0,<46.0.0
+base58>=2.1.1,<3.0.0
+
+# Analytics & Graph Intelligence
+numpy>=1.26.0,<3.0.0
+scikit-learn>=1.3.0,<2.0.0
+networkx>=3.2.1,<4.0.0
+nltk>=3.8.1,<4.0.0
+
+# CLI & Visualization Tools
+colorama>=0.4.6,<1.0.0
+tqdm>=4.66.1,<5.0.0
+reportlab>=4.0.0,<5.0.0
+flask>=3.0.0,<4.0.0
