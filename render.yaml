@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: pralayx-darkweb-crawler
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python3 -m src.cli --help
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.10.12
